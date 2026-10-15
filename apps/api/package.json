@@ -10,12 +10,12 @@
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.1151.0",
-    "@aws-sdk/lib-dynamodb": "^3.1151.0",
-    "@qr-kitchen/shared": "workspace:*"
+    "@aws-sdk/lib-dynamodb": "^3.1151.0"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.164",
     "@types/node": "^26.6.5",
+    "esbuild": "^0.28.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }
