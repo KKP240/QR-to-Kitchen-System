@@ -4,7 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "aws:creds": "powershell -ExecutionPolicy Bypass -File scripts/set-aws-credentials.ps1",
+    "aws:whoami": "aws sts get-caller-identity",
+    "deploy": "scripts\\deploy.bat"
   },
   "keywords": [],
   "author": "",

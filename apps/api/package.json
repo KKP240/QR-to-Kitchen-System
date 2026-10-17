@@ -6,7 +6,8 @@
     "db:create": "tsx src/local/create-tables.ts",
     "db:seed": "tsx src/local/seed.ts",
     "invoke": "tsx src/local/invoke.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "db:seed:aws": "cross-env TARGET=aws tsx src/local/seed.ts"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.1151.0",
@@ -15,6 +16,7 @@
   "devDependencies": {
     "@types/aws-lambda": "^8.10.164",
     "@types/node": "^26.6.5",
+    "cross-env": "^10.1.0",
     "esbuild": "^0.28.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"

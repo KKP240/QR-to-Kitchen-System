@@ -1,0 +1,10 @@
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "qr-kitchen"
+region = "us-east-1"
+resolve_s3 = true
+s3_prefix = "qr-kitchen"
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = false
+role_arn = "arn:aws:iam::430142062981:role/LabRole"

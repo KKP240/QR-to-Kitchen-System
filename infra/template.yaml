@@ -19,13 +19,49 @@ Globals:
 
 Resources:
   # ---------- API ----------
-  HttpApi:
-    Type: AWS::Serverless::HttpApi
+  HealthUrl:
+    Type: AWS::Lambda::Url
     Properties:
-      CorsConfiguration:
-        AllowOrigins: ["*"]
-        AllowMethods: [GET, POST, PUT, DELETE, OPTIONS]
-        AllowHeaders: ["*"]
+      TargetFunctionArn: !Ref HealthFunction
+      AuthType: NONE
+
+  HealthUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunctionUrl
+      FunctionName: !Ref HealthFunction
+      Principal: "*"
+      FunctionUrlAuthType: NONE
+
+  MenuListUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !Ref MenuListFunction
+      AuthType: NONE
+
+  MenuListUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunctionUrl
+      FunctionName: !Ref MenuListFunction
+      Principal: "*"
+      FunctionUrlAuthType: NONE
+  
+  HealthInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref HealthFunction
+      Principal: "*"
+      InvokedViaFunctionUrl: true
+
+  MenuListInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref MenuListFunction
+      Principal: "*"
+      InvokedViaFunctionUrl: true
 
   # ---------- Lambda ----------
   HealthFunction:
@@ -40,13 +76,6 @@ Resources:
       CodeUri: ../apps/api/
       Handler: health.handler
       Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/LabRole"
-      Events:
-        Api:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref HttpApi
-            Path: /health
-            Method: GET
 
   MenuListFunction:
     Type: AWS::Serverless::Function
@@ -60,13 +89,19 @@ Resources:
       CodeUri: ../apps/api/
       Handler: menu-list.handler
       Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/LabRole"
-      Events:
-        Api:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref HttpApi
-            Path: /menu
-            Method: GET
+
+  SeedFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Target: es2022
+        External: ["@aws-sdk/*"]
+        EntryPoints: [src/handlers/seed.ts]
+    Properties:
+      CodeUri: ../apps/api/
+      Handler: seed.handler
+      Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/LabRole"
 
   # ---------- DynamoDB ----------
   MenuTable:
@@ -118,6 +153,7 @@ Resources:
           KeyType: HASH
 
 Outputs:
-  ApiUrl:
-    Description: Base URL ของ HTTP API
-    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+  HealthUrl:
+    Value: !GetAtt HealthUrl.FunctionUrl
+  MenuListUrl:
+    Value: !GetAtt MenuListUrl.FunctionUrl
