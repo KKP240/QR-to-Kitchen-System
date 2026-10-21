@@ -18,78 +18,43 @@ Globals:
         TABLE_PREFIX: !Ref TablePrefix
 
 Resources:
-  # ---------- API ----------
-  HealthUrl:
-    Type: AWS::Lambda::Url
-    Properties:
-      TargetFunctionArn: !Ref HealthFunction
-      AuthType: NONE
-
-  HealthUrlPermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunctionUrl
-      FunctionName: !Ref HealthFunction
-      Principal: "*"
-      FunctionUrlAuthType: NONE
-
-  MenuListUrl:
-    Type: AWS::Lambda::Url
-    Properties:
-      TargetFunctionArn: !Ref MenuListFunction
-      AuthType: NONE
-
-  MenuListUrlPermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunctionUrl
-      FunctionName: !Ref MenuListFunction
-      Principal: "*"
-      FunctionUrlAuthType: NONE
-  
-  HealthInvokePermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !Ref HealthFunction
-      Principal: "*"
-      InvokedViaFunctionUrl: true
-
-  MenuListInvokePermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !Ref MenuListFunction
-      Principal: "*"
-      InvokedViaFunctionUrl: true
-
-  # ---------- Lambda ----------
-  HealthFunction:
+  # ---------- API (Lambda ตัวเดียว + Function URL เดียว) ----------
+  ApiFunction:
     Type: AWS::Serverless::Function
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
         Target: es2022
         External: ["@aws-sdk/*"]
-        EntryPoints: [src/handlers/health.ts]
+        EntryPoints: [src/index.ts]
     Properties:
       CodeUri: ../apps/api/
-      Handler: health.handler
+      Handler: index.handler
       Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/LabRole"
 
-  MenuListFunction:
-    Type: AWS::Serverless::Function
-    Metadata:
-      BuildMethod: esbuild
-      BuildProperties:
-        Target: es2022
-        External: ["@aws-sdk/*"]
-        EntryPoints: [src/handlers/menu-list.ts]
+  ApiFunctionUrl:
+    Type: AWS::Lambda::Url
     Properties:
-      CodeUri: ../apps/api/
-      Handler: menu-list.handler
-      Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/LabRole"
+      TargetFunctionArn: !Ref ApiFunction
+      AuthType: NONE
 
+  ApiUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunctionUrl
+      FunctionName: !Ref ApiFunction
+      Principal: "*"
+      FunctionUrlAuthType: NONE
+
+  ApiInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref ApiFunction
+      Principal: "*"
+      InvokedViaFunctionUrl: true
+
+  # ---------- Seed (ใช้ช่วงพัฒนา ไม่มี URL เรียกจากภายนอกไม่ได้) ----------
   SeedFunction:
     Type: AWS::Serverless::Function
     Metadata:
@@ -153,7 +118,6 @@ Resources:
           KeyType: HASH
 
 Outputs:
-  HealthUrl:
-    Value: !GetAtt HealthUrl.FunctionUrl
-  MenuListUrl:
-    Value: !GetAtt MenuListUrl.FunctionUrl
+  ApiUrl:
+    Description: Base URL ของ API (Lambda Function URL)
+    Value: !GetAtt ApiFunctionUrl.FunctionUrl
