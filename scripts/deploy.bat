@@ -12,4 +12,4 @@ echo Deploying to account %ACCOUNT_ID%
 
 call sam build
 if errorlevel 1 exit /b 1
-call sam deploy --role-arn arn:aws:iam::%ACCOUNT_ID%:role/LabRole
+call sam deploy --role-arn arn:aws:iam::%ACCOUNT_ID%:role/LabRole --no-fail-on-empty-changeset
