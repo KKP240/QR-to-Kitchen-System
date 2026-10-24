@@ -2,11 +2,12 @@ import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import { db } from "./dynamo";
 import { TABLES } from "./config";
 import { hashPassword } from "./auth";
+import type { UserRole } from "./types";
 
 export interface User {
   username: string;
   passwordHash: string;
-  role: string;
+  role: UserRole;
 }
 
 export async function getUser(username: string): Promise<User | null> {
@@ -15,7 +16,7 @@ export async function getUser(username: string): Promise<User | null> {
 }
 
 // เรียกซ้ำกับ username เดิม = รีเซ็ตรหัสผ่าน
-export async function createUser(username: string, password: string, role = "owner") {
+export async function createUser(username: string, password: string, role: UserRole = "manager") {
   const passwordHash = await hashPassword(password);
   await db.send(
     new PutCommand({ TableName: TABLES.users, Item: { username, passwordHash, role } })

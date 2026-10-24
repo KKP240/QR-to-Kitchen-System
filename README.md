@@ -85,8 +85,10 @@ Lambda Function URL ──► Lambda "ApiFunction" (router ตัวเดีย
 | Monorepo (pnpm workspace), shared types | ✅ เสร็จ |
 | Next.js static export + หน้า `/`, `/menu`, `/kitchen`, `/admin` | ✅ โครงเสร็จ (หน้า `/menu` ดึงเมนูจริงจาก API แล้ว ส่วน `/kitchen` และ `/admin` ยังเป็นหน้าเปล่า) |
 | API router + `GET /health`, `GET /menu` | ✅ ใช้งานได้ |
-| API: `POST/GET /orders`, `PATCH /orders/:id/status` | 🔲 วางโครงไว้ ตอบ `501 Not implemented` |
-| API: `POST/PUT/DELETE /menu`, `/tables` | 🔲 วางโครงไว้ ตอบ `501` (ต้องมี auth ก่อนเปิดใช้) |
+| API Auth + roles (`customer`, `kitchen`, `manager`) | ✅ JWT login และจำกัดสิทธิ์ตาม endpoint |
+| API: `POST/GET /orders`, `PATCH /orders/:id/status` | ✅ ใช้งานได้ (ต้อง login ตาม role) |
+| API: `POST/PUT/DELETE /menu` | ✅ ผู้จัดการเท่านั้น |
+| API: `/tables` | 🔲 ตรวจ role ผู้จัดการแล้ว แต่การจัดการข้อมูลยังตอบ `501` |
 | DynamoDB 4 ตาราง (deploy บน AWS) | ✅ เสร็จ |
 | Local dev: Docker DynamoDB Local + local API server | ✅ เสร็จ |
 | Hosting S3 + CloudFront + สคริปต์ `web:deploy` | ✅ เสร็จ (ทดสอบเปิดจากมือถือแล้ว) |
@@ -95,7 +97,7 @@ Lambda Function URL ──► Lambda "ApiFunction" (router ตัวเดีย
 | ระบบออเดอร์ + จอครัว | 🔲 ยังไม่ทำ |
 | QR Code generator ในหลังบ้าน | 🔲 ยังไม่ทำ |
 
-> ⚠️ ปัจจุบัน API ทุก endpoint **เปิดสาธารณะ** (ไม่มี auth) endpoint ฝั่งเจ้าของร้านจึงยังเป็น `501` อย่าเปิดใช้งานจริงก่อนมีระบบตรวจสิทธิ์
+> API ยังเป็นงานพัฒนา: การจัดการโต๊ะยังไม่ implement และไม่มีการสมัครสมาชิกผ่าน HTTP; สร้างบัญชีผ่านคำสั่ง local ด้านล่าง
 
 ---
 
@@ -227,9 +229,43 @@ pnpm --filter @qr-kitchen/api run dev
 ทดสอบ:
 - http://localhost:4000/health → `{"status":"ok", ...}`
 - http://localhost:4000/menu → เมนู 3 รายการ
-- http://localhost:4000/orders → `501 Not implemented` (ยังไม่ได้ทำ ถูกต้องแล้ว)
+- http://localhost:4000/orders → `401 Unauthorized` หากไม่ส่ง Bearer token
 
-### 7.3 ตั้งค่าและเปิดหน้าเว็บ (หน้าต่างที่ 3)
+### 7.3 ทดสอบ Auth และ role ด้วย Postman
+
+หลังจากสร้าง DynamoDB tables แล้ว ให้เปิด API ตามข้อ 7.2 และสร้างบัญชีทดสอบในหน้าต่างใหม่:
+
+```bat
+pnpm --filter @qr-kitchen/api run admin:create customer01 password123 customer
+pnpm --filter @qr-kitchen/api run admin:create kitchen01 password123 kitchen
+pnpm --filter @qr-kitchen/api run admin:create manager01 password123 manager
+```
+
+`admin:create` ต้องการรหัสผ่านอย่างน้อย 8 ตัว และถ้าไม่ระบุ role จะสร้าง `manager` (บัญชีเก่าที่ใช้ role `owner` ให้สร้างซ้ำด้วย role `manager`)
+
+ใน Postman สร้าง request `POST http://localhost:4000/auth/login` โดยเลือก **Body → raw → JSON**:
+
+```json
+{"username":"customer01","password":"password123"}
+```
+
+ทำซ้ำโดยเปลี่ยน username เพื่อ login เป็น role อื่น จาก response เก็บค่า `token` แล้วเปิด **Authorization → Bearer Token** ใน request ถัดไป (หรือใส่ header `Authorization: Bearer <token>`). ตรวจ token ด้วย `GET http://localhost:4000/auth/me` ซึ่งควรคืน username และ role ที่ login ไว้
+
+ลองตรวจสิทธิ์ตามนี้:
+
+| Request | Token | ผลที่คาดหวัง |
+|---|---|---|
+| `GET /orders` โดยไม่ใส่ token | ไม่มี | `401 Unauthorized` |
+| `POST /orders` พร้อม `{"tableId":"5","items":[{"menuItemId":"m1","quantity":1}]}` | customer | `201 Created` |
+| `GET /orders` | kitchen หรือ manager | `200 OK` พร้อมรายการออเดอร์ |
+| `PATCH /orders/<id>/status` พร้อม `{"status":"cooking"}` | kitchen หรือ manager | `200 OK` และสถานะเปลี่ยน |
+| `POST /menu` พร้อม `{"name":"ข้าวผัด","price":65}` | customer หรือ kitchen | `403 Forbidden` |
+| `POST /menu` พร้อม body เดียวกัน | manager | `201 Created` |
+| `GET /tables` | manager | `501 Not Implemented` (ผ่าน auth แล้ว แต่ route ยังไม่ implement) |
+
+สิทธิ์โดยสรุป: `customer` สั่งอาหาร, `kitchen` ดูรายการและเปลี่ยนสถานะออเดอร์, `manager` จัดการเมนู/โต๊ะและเข้าถึงงานออเดอร์ทั้งหมด ส่วน `GET /menu` และ `GET /health` เป็น public
+
+### 7.4 ตั้งค่าและเปิดหน้าเว็บ (หน้าต่างที่ 3)
 
 สร้างไฟล์ `apps/web/.env.local` (copy จาก `.env.example`):
 
@@ -247,7 +283,7 @@ pnpm --filter @qr-kitchen/web dev
 
 > หลังแก้ `.env.local` ต้องหยุด (Ctrl+C) แล้วรัน `pnpm dev` ใหม่ Next.js อ่านค่า env ตอนเริ่มเท่านั้น
 
-### 7.4 ตรวจความถูกต้องของโค้ด
+### 7.5 ตรวจความถูกต้องของโค้ด
 
 ```bat
 pnpm --filter @qr-kitchen/api run typecheck
@@ -256,7 +292,7 @@ pnpm --filter @qr-kitchen/web build
 
 `web build` สำเร็จแปลว่า static export ผ่าน (ผลลัพธ์อยู่ที่ `apps/web/out`)
 
-### 7.5 ถ้าไม่อยากรัน Docker/API เอง (Frontend)
+### 7.6 ถ้าไม่อยากรัน Docker/API เอง (Frontend)
 
 ให้ผู้ดูแลโครงสร้างส่ง **API URL บน AWS** มา แล้วใส่ใน `.env.local`:
 

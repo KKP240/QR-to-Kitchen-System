@@ -4,6 +4,7 @@ import { db } from "../lib/dynamo";
 import { TABLES } from "../lib/config";
 import { json } from "../lib/response";
 import type { Route } from "../lib/types";
+import { withRoleAuth } from "../lib/auth";
 
 const VALID_STATUSES: OrderStatus[] = ["pending", "cooking", "ready", "served"];
 
@@ -12,7 +13,7 @@ export const orderRoutes: Route[] = [
   {
     method: "POST",
     path: "/orders",
-    handler: async (ctx: any) => {
+    handler: withRoleAuth(["customer"], async (ctx: any) => {
       const body = JSON.parse(ctx.event.body ?? "{}");
 
       // Validation เบื้องต้นตาม Contract
@@ -45,14 +46,14 @@ export const orderRoutes: Route[] = [
       }));
 
       return json(201, newOrder);
-    },
+    }),
   },
 
   // 2. จอครัว polling ดึงออเดอร์ (รองรับ ?status=pending,cooking)
   {
     method: "GET",
     path: "/orders",
-    handler: async (ctx: any) => {
+    handler: withRoleAuth(["kitchen", "manager"], async (ctx: any) => {
       const queryParams = ctx.event.queryStringParameters || {};
       const statusParam = queryParams.status;
 
@@ -79,12 +80,12 @@ export const orderRoutes: Route[] = [
       orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
       return json(200, { orders });
-    },
+    }),
   },
   {
   method: "GET",
   path: "/orders/:id",
-  handler: async (ctx: any) => {
+  handler: withRoleAuth(["kitchen", "manager"], async (ctx: any) => {
     const id = ctx.params?.id;
     if (!id) return json(400, { error: "Missing 'id' in path" });
 
@@ -98,14 +99,14 @@ export const orderRoutes: Route[] = [
     }
 
     return json(200, result.Item as Order);
-  },
+  }),
 },
 
   // 3. ครัวเปลี่ยนสถานะ pending -> cooking -> ready -> served
   {
     method: "PATCH",
     path: "/orders/:id/status",
-    handler: async (ctx: any) => {
+    handler: withRoleAuth(["kitchen", "manager"], async (ctx: any) => {
       const id = ctx.params?.id;
       if (!id) {
         return json(400, { error: "Missing 'id' in path" });
@@ -147,6 +148,6 @@ export const orderRoutes: Route[] = [
       }
 
       return json(200, result.Attributes as Order);
-    },
+    }),
   },
 ];

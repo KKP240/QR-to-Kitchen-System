@@ -1,7 +1,7 @@
 import { createHmac, randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import { json } from "./response";
-import type { RouteHandler, TokenPayload } from "./types";
+import { USER_ROLES, type RouteHandler, type TokenPayload, type UserRole } from "./types";
 
 const scryptAsync = promisify(scrypt) as (
   password: string,
@@ -37,7 +37,7 @@ function sign(data: string): Buffer {
   return createHmac("sha256", secret()).update(data).digest();
 }
 
-export function signToken(sub: string, role: string, ttlSeconds = 8 * 3600): string {
+export function signToken(sub: string, role: UserRole, ttlSeconds = 8 * 3600): string {
   const header = b64(JSON.stringify({ alg: "HS256", typ: "JWT" }));
   const payload: TokenPayload = { sub, role, exp: Math.floor(Date.now() / 1000) + ttlSeconds };
   const body = b64(JSON.stringify(payload));
@@ -53,7 +53,12 @@ export function verifyToken(token: string): TokenPayload | null {
   if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null;
   try {
     const p = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")) as TokenPayload;
-    if (typeof p.exp !== "number" || p.exp < Math.floor(Date.now() / 1000)) return null;
+    if (
+      typeof p.sub !== "string" ||
+      !USER_ROLES.includes(p.role) ||
+      typeof p.exp !== "number" ||
+      p.exp < Math.floor(Date.now() / 1000)
+    ) return null;
     return p;
   } catch {
     return null;
@@ -70,4 +75,13 @@ export function withAuth(handler: RouteHandler): RouteHandler {
     if (!user) return json(401, { message: "Unauthorized" });
     return handler({ ...ctx, user });
   };
+}
+
+export function withRoleAuth(roles: readonly UserRole[], handler: RouteHandler): RouteHandler {
+  return withAuth(async (ctx) => {
+    if (!ctx.user || !roles.includes(ctx.user.role)) {
+      return json(403, { message: "Forbidden" });
+    }
+    return handler(ctx);
+  });
 }

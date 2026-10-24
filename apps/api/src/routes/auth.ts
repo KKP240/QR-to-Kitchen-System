@@ -1,6 +1,6 @@
 import { signToken, verifyPassword, withAuth } from "../lib/auth";
 import { json } from "../lib/response";
-import type { Route } from "../lib/types";
+import { USER_ROLES, type Route } from "../lib/types";
 import { getUser } from "../lib/users";
 
 export const authRoutes: Route[] = [
@@ -19,7 +19,7 @@ export const authRoutes: Route[] = [
         return json(400, { message: "username and password are required" });
       }
       const user = await getUser(username);
-      if (!user || !(await verifyPassword(password, user.passwordHash))) {
+      if (!user || !(await verifyPassword(password, user.passwordHash)) || !USER_ROLES.includes(user.role)) {
         return json(401, { message: "Invalid username or password" });
       }
       return json(200, {

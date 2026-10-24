@@ -4,7 +4,7 @@ import { db } from "../lib/dynamo";
 import { TABLES } from "../lib/config";
 import { json } from "../lib/response";
 import type { Route } from "../lib/types";
-import { withAuth } from "../lib/auth";
+import { withRoleAuth } from "../lib/auth";
 
 export const menuRoutes: Route[] = [
   {
@@ -19,8 +19,7 @@ export const menuRoutes: Route[] = [
   {
     method: "POST",
     path: "/menu",
-    // TODO(admin team): ต้องเพิ่ม Auth middleware ก่อนเปิดใช้งานจริง
-    handler: async (ctx: any) => {
+    handler: withRoleAuth(["manager"], async (ctx: any) => {
       const body = JSON.parse(ctx.event.body ?? "{}");
       
       if (!body.name || typeof body.price !== "number") {
@@ -41,13 +40,12 @@ export const menuRoutes: Route[] = [
       }));
       
       return json(201, newItem);
-    },
+    }),
   },
   {
     method: "PUT",
     path: "/menu/:id",
-    // TODO(admin team): ต้องเพิ่ม Auth middleware ก่อนเปิดใช้งานจริง
-    handler: async (ctx: any) => {
+    handler: withRoleAuth(["manager"], async (ctx: any) => {
       const id = ctx.params?.id;
       if (!id) return json(400, { error: "Missing 'id' in path" });
 
@@ -93,13 +91,12 @@ export const menuRoutes: Route[] = [
       }));
 
       return json(200, result.Attributes as MenuItem);
-    },
+    }),
   },
   {
     method: "DELETE",
     path: "/menu/:id",
-    // TODO(admin team): ต้องเพิ่ม Auth middleware ก่อนเปิดใช้งานจริง
-    handler: async (ctx: any) => {
+    handler: withRoleAuth(["manager"], async (ctx: any) => {
       const id = ctx.params?.id;
       if (!id) return json(400, { error: "Missing 'id' in path" });
 
@@ -109,6 +106,6 @@ export const menuRoutes: Route[] = [
       }));
       
       return json(200, { deleted: true, id });
-    },
+    }),
   },
 ];

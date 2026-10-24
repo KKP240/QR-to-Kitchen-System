@@ -1,8 +1,11 @@
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 
+export const USER_ROLES = ["customer", "kitchen", "manager"] as const;
+export type UserRole = (typeof USER_ROLES)[number];
+
 export interface TokenPayload {
   sub: string; // username
-  role: string;
+  role: UserRole;
   exp: number;
 }
 
