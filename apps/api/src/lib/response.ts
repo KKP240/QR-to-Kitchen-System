@@ -3,7 +3,7 @@ import type { RouteResult } from "./types";
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type,Authorization",
+  "Access-Control-Allow-Headers": "Content-Type,Authorization,X-Order-Tracking-Token",
 };
 
 export function json(statusCode: number, body: unknown): RouteResult {

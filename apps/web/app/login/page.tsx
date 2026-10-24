@@ -61,7 +61,7 @@ export default function LoginPage() {
         <div className={styles.heading}>
           <p>ยินดีต้อนรับกลับ</p>
           <h1 id="login-title">เข้าสู่ระบบ</h1>
-          <span>ใช้บัญชีลูกค้า ครัว หรือผู้จัดการที่ได้รับจากร้าน</span>
+          <span>สำหรับทีมครัวและผู้จัดการ ลูกค้าสแกน QR เพื่อสั่งได้โดยไม่ต้องเข้าสู่ระบบ</span>
         </div>
 
         <form className={styles.form} onSubmit={submit}>

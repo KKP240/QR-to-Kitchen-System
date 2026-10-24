@@ -1,3 +1,4 @@
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { ConditionalCheckFailedException } from "@aws-sdk/client-dynamodb";
 import { GetCommand, PutCommand, ScanCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { MenuItem, Order, OrderItem, OrderStatus, RestaurantTable } from "@qr-kitchen/shared";
@@ -5,7 +6,7 @@ import { db } from "../lib/dynamo";
 import { TABLES } from "../lib/config";
 import { json } from "../lib/response";
 import type { Route } from "../lib/types";
-import { withRoleAuth } from "../lib/auth";
+import { verifyToken, withRoleAuth } from "../lib/auth";
 
 const VALID_STATUSES: OrderStatus[] = ["pending", "cooking", "ready", "served"];
 
@@ -14,7 +15,7 @@ export const orderRoutes: Route[] = [
   {
     method: "POST",
     path: "/orders",
-    handler: withRoleAuth(["customer"], async (ctx: any) => {
+    handler: async (ctx: any) => {
       let body: any;
       try {
         body = JSON.parse(ctx.event.body ?? "{}");
@@ -48,24 +49,27 @@ export const orderRoutes: Route[] = [
       }
 
       const createdAt = new Date().toISOString();
+      const trackingToken = randomBytes(32).toString("base64url");
       const newOrder: Order = {
         id: crypto.randomUUID(),
         tableId: table.name,
         items: orderItems,
         status: "pending",
         createdAt,
-        customerUsername: ctx.user.sub,
         note: typeof body.note === "string" && body.note.trim() ? body.note.trim().slice(0, 500) : undefined,
         statusHistory: [{ status: "pending", timestamp: createdAt }],
       };
 
       await db.send(new PutCommand({
         TableName: TABLES.orders,
-        Item: newOrder,
+        Item: {
+          ...newOrder,
+          trackingTokenHash: createHash("sha256").update(trackingToken).digest("hex"),
+        },
       }));
 
-      return json(201, newOrder);
-    }),
+      return json(201, { ...newOrder, trackingToken });
+    },
   },
 
   // 2. จอครัว polling ดึงออเดอร์ (รองรับ ?status=pending,cooking)
@@ -93,18 +97,19 @@ export const orderRoutes: Route[] = [
       }
 
       const result = await db.send(new ScanCommand(scanParams));
-      let orders = (result.Items ?? []) as Order[];
+      let orders = (result.Items ?? []) as (Order & { trackingTokenHash?: string })[];
 
       // เรียงลำดับจากใหม่ไปเก่า (ตาม createdAt) เพื่อให้ครัวเห็นออเดอร์ล่าสุดบนสุด
       orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-      return json(200, { orders });
+      const safeOrders = orders.map(({ trackingTokenHash: _trackingTokenHash, ...order }) => order);
+      return json(200, { orders: safeOrders });
     }),
   },
   {
   method: "GET",
   path: "/orders/:id",
-  handler: withRoleAuth(["customer", "kitchen", "manager"], async (ctx: any) => {
+  handler: async (ctx: any) => {
     const id = ctx.params?.id;
     if (!id) return json(400, { error: "Missing 'id' in path" });
 
@@ -116,12 +121,27 @@ export const orderRoutes: Route[] = [
     if (!result.Item) {
       return json(404, { error: "Order not found" });
     }
-    if (ctx.user.role === "customer" && result.Item.customerUsername !== ctx.user.sub) {
-      return json(404, { error: "Order not found" });
+
+    const authorization = ctx.event.headers?.authorization ?? ctx.event.headers?.Authorization ?? "";
+    const bearer = /^Bearer (.+)$/i.exec(authorization);
+    const user = bearer ? verifyToken(bearer[1]) : null;
+    const isStaff = user?.role === "kitchen" || user?.role === "manager";
+    if (!isStaff) {
+      const trackingToken = ctx.event.headers?.["x-order-tracking-token"] ?? ctx.event.headers?.["X-Order-Tracking-Token"];
+      const storedHash = result.Item.trackingTokenHash;
+      if (typeof trackingToken !== "string" || typeof storedHash !== "string") {
+        return json(401, { message: "Order tracking token required" });
+      }
+      const expectedHash = Buffer.from(storedHash, "hex");
+      const providedHash = createHash("sha256").update(trackingToken).digest();
+      if (expectedHash.length !== providedHash.length || !timingSafeEqual(expectedHash, providedHash)) {
+        return json(404, { error: "Order not found" });
+      }
     }
 
-    return json(200, result.Item as Order);
-  }),
+    const { trackingTokenHash: _trackingTokenHash, ...order } = result.Item;
+    return json(200, order as Order);
+  },
 },
 
   // 3. ครัวเปลี่ยนสถานะ pending -> cooking -> ready -> served

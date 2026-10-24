@@ -3,14 +3,12 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import type { MenuItem, Order } from "@qr-kitchen/shared";
-import { api } from "@/lib/api";
-import { AuthGate, SignOutButton, useAuthUser } from "@/components/auth-gate";
+import { api, setOrderTrackingToken } from "@/lib/api";
 import styles from "./menu.module.css";
 import { MenuView } from "./menu-view";
 import { CartView } from "./cart-view";
 import { TrackingView } from "./tracking-view";
 import {
-  DEFAULT_TABLE,
   decorateItems,
   formatNumber,
   type CartLine,
@@ -27,11 +25,9 @@ type Screen = "menu" | "cart" | "tracking";
 
 export default function MenuPage() {
   return (
-    <AuthGate roles={["customer"]}>
-      <Suspense fallback={<MenuPageFallback />}>
-        <MenuPageContent />
-      </Suspense>
-    </AuthGate>
+    <Suspense fallback={<MenuPageFallback />}>
+      <MenuPageContent />
+    </Suspense>
   );
 }
 
@@ -39,14 +35,14 @@ function MenuPageFallback() {
   return (
     <main className={styles.page}>
       <div className={styles.app}>
-        <MenuTopBar table={DEFAULT_TABLE} />
+        <MenuTopBar table="" />
         <div className={styles.screen}>
           <MenuView
             items={[]}
             cart={{}}
             loading
             error={null}
-            table={DEFAULT_TABLE}
+            table=""
             onAdd={() => {}}
             onRemove={() => {}}
             onRetry={() => {}}
@@ -61,7 +57,7 @@ function MenuPageContent() {
   const searchParams = useSearchParams();
   const tableFromUrl = (searchParams.get("table") ?? "").trim();
   const orderIdFromUrl = (searchParams.get("order") ?? "").trim();
-  const table = tableFromUrl || DEFAULT_TABLE;
+  const table = tableFromUrl;
 
   const [screen, setScreen] = useState<Screen>("menu");
   const [items, setItems] = useState<MenuItem[]>([]);
@@ -216,18 +212,17 @@ function MenuPageContent() {
 
   const checkout = useCallback(async () => {
     if (lines.length === 0 || submitting) return;
+    if (!table) {
+      setSubmitError("ไม่พบโต๊ะ กรุณาสแกน QR Code ที่โต๊ะก่อนสั่งอาหาร");
+      return;
+    }
     setSubmitting(true);
     setSubmitError(null);
 
-    const payloadItems = lines.map(({ item, quantity }) => ({
-      menuItemId: item.id,
-      name: item.name,
-      price: item.price,
-      quantity,
-    }));
+    const payloadItems = lines.map(({ item, quantity }) => ({ menuItemId: item.id, quantity }));
 
     try {
-      const created = await api<Order>("/orders", {
+      const created = await api<Order & { trackingToken: string }>("/orders", {
         method: "POST",
         body: JSON.stringify({
           tableId: table,
@@ -235,10 +230,10 @@ function MenuPageContent() {
           note: note.trim() || undefined,
         }),
       });
+      setOrderTrackingToken(created.id, created.trackingToken);
 
       const normalizedOrder: Order = {
         ...created,
-        items: created.items?.length ? created.items : payloadItems,
         note: created.note ?? (note.trim() || undefined),
       };
 
@@ -368,7 +363,6 @@ function MenuPageContent() {
 }
 
 function MenuTopBar({ table }: { table: string }) {
-  const user = useAuthUser();
   return (
     <header className={styles.topbar}>
       <div className={styles.brand}>
@@ -377,14 +371,12 @@ function MenuTopBar({ table }: { table: string }) {
         </span>
         <div className={styles.brandText}>
           <strong className={styles.brandName}>ใบกะเพรา</strong>
-          <small className={styles.brandMeta}>{user?.username}</small>
         </div>
       </div>
       <span className={styles.tableChip}>
         <ChairIcon size={12} />
-        โต๊ะ {table}
+        โต๊ะ {table || "—"}
       </span>
-      <SignOutButton className={styles.logoutButton} />
     </header>
   );
 }
@@ -406,9 +398,8 @@ function SubTopBar({
       <span className={styles.subTitle}>{title}</span>
       <span className={styles.tableChip}>
         <ChairIcon size={12} />
-        โต๊ะ {table}
+        {table ? `โต๊ะ ${table}` : "สแกน QR โต๊ะ"}
       </span>
-      <SignOutButton className={styles.logoutButton} />
     </header>
   );
 }

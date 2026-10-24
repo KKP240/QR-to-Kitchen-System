@@ -35,7 +35,6 @@ export interface Order {
   startedAt?: string;
   servedAt?: string;
   note?: string;
-  customerUsername?: string;
   statusHistory?: {   
     status: OrderStatus;
     timestamp: string;
