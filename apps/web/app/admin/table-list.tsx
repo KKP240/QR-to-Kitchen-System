@@ -1,4 +1,3 @@
-import type { Dispatch, SetStateAction } from "react";
 import type { Table } from "./admin-data";
 import { QRCode } from "./qr-code";
 import styles from "./admin.module.css";
@@ -10,7 +9,7 @@ type Props = {
   setSearch: (value: string) => void;
   setPrinting: (ids: string[]) => void;
   setTableDraft: (table: Table) => void;
-  setTables: Dispatch<SetStateAction<Table[]>>;
+  onToggle: (table: Table) => void;
   getTableUrl: (table: Table) => string;
 };
 
@@ -20,20 +19,12 @@ export function TableList({
   setSearch,
   setPrinting,
   setTableDraft,
-  setTables,
+  onToggle,
   getTableUrl,
 }: Props) {
   const filteredTables = tables.filter((table) =>
     table.name.includes(search.trim()),
   );
-
-  function toggleTable(tableId: string) {
-    setTables(
-      tables.map((table) =>
-        table.id === tableId ? { ...table, active: !table.active } : table,
-      ),
-    );
-  }
 
   function downloadQRCode(table: Table) {
     const svg = document.getElementById(`qr-${table.id}`);
@@ -103,7 +94,7 @@ export function TableList({
                 <Toggle
                   checked={table.active}
                   label={`เปิดใช้งานโต๊ะ ${table.name}`}
-                  onChange={() => toggleTable(table.id)}
+                  onChange={() => onToggle(table)}
                 />
               </label>
             </div>

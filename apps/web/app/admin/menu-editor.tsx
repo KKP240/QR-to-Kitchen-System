@@ -1,5 +1,5 @@
 import Image from "next/image";
-import type { Dispatch, SetStateAction, FormEvent, RefObject } from "react";
+import type { Dispatch, SetStateAction, FormEvent } from "react";
 import { categories, type Dish } from "./admin-data";
 import styles from "./admin.module.css";
 import { Icon, Toggle } from "./admin-controls";
@@ -8,18 +8,16 @@ type Props = {
   draft: Dish;
   setDraft: Dispatch<SetStateAction<Dish>>;
   saveDish: (event: FormEvent) => void;
-  fileInput: RefObject<HTMLInputElement | null>;
-  uploadDishImage: (file?: File) => void;
   navigate: (view: "menu" | "tables") => void;
+  saving: boolean;
 };
 
 export function MenuEditor({
   draft,
   setDraft,
   saveDish,
-  fileInput,
-  uploadDishImage,
   navigate,
+  saving,
 }: Props) {
   return (
     <div className={styles.editorGrid}>
@@ -39,24 +37,19 @@ export function MenuEditor({
             />
             <div>
               <label>รูปอาหาร</label>
-              <button
-                type="button"
-                className={styles.secondary}
-                onClick={() => fileInput.current?.click()}
-              >
-                <Icon name="edit" size={16} />
-                เปลี่ยนรูปอาหาร
-              </button>
-              <small>JPG, PNG, WebP ไม่เกิน 5 MB</small>
-              <input
-                ref={fileInput}
-                hidden
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                onChange={(event) => uploadDishImage(event.target.files?.[0])}
-              />
+              <small>ใส่ URL รูปภาพที่เข้าถึงได้สาธารณะ</small>
             </div>
           </div>
+          <label className={styles.field}>
+            URL รูปภาพ
+            <input
+              type="url"
+              maxLength={2000}
+              value={draft.image}
+              onChange={(event) => setDraft({ ...draft, image: event.target.value })}
+              placeholder="https://example.com/menu.jpg"
+            />
+          </label>
           <label className={styles.field}>
             ชื่ออาหาร *
             <input
@@ -141,9 +134,9 @@ export function MenuEditor({
           >
             ยกเลิก
           </button>
-          <button type="submit" className={styles.primary}>
+          <button type="submit" className={styles.primary} disabled={saving}>
             <Icon name="check" size={16} />
-            บันทึกการเปลี่ยนแปลง
+            {saving ? "กำลังบันทึก..." : "บันทึกการเปลี่ยนแปลง"}
           </button>
         </footer>
       </form>
@@ -174,8 +167,8 @@ export function MenuEditor({
         <div className={styles.infoBox}>
           <Icon name="info" size={18} />
           <div>
-            <strong>บันทึกแล้ว ข้อมูลจะอยู่ในเครื่องนี้</strong>
-            <p>ตัวอย่างนี้ยังไม่เชื่อมต่อระบบจัดการเมนูบนเซิร์ฟเวอร์</p>
+            <strong>บันทึกข้อมูลลงระบบร้าน</strong>
+            <p>รายการที่บันทึกจะปรากฏบนหน้าเมนูของลูกค้า</p>
           </div>
         </div>
       </aside>

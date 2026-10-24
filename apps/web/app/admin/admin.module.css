@@ -102,6 +102,16 @@
   padding-left: 24px;
   color: #374238;
 }
+.signOut {
+  padding: 7px 10px;
+  color: var(--green);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 11px;
+  white-space: nowrap;
+}
 .profile b {
   display: grid;
   place-items: center;

@@ -11,6 +11,13 @@ export interface MenuItem {
   recommended?: boolean;
 }
 
+export interface RestaurantTable {
+  id: string;
+  name: string;
+  seats: number;
+  active: boolean;
+}
+
 export interface OrderItem {
   menuItemId: string;
   name: string;
@@ -25,7 +32,10 @@ export interface Order {
   status: OrderStatus;
   createdAt: string;
   updatedAt?: string;
+  startedAt?: string;
+  servedAt?: string;
   note?: string;
+  customerUsername?: string;
   statusHistory?: {   
     status: OrderStatus;
     timestamp: string;

@@ -177,6 +177,17 @@
   letter-spacing: 0.1px;
 }
 
+.logoutButton {
+  flex-shrink: 0;
+  padding: 6px 7px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  font-size: 9px !important;
+  white-space: nowrap;
+}
+
 /* ---------- Shared layout ---------- */
 
 .view {

@@ -1,5 +1,4 @@
 import Image from "next/image";
-import type { Dispatch, SetStateAction } from "react";
 import { categories, type Dish } from "./admin-data";
 import styles from "./admin.module.css";
 import { Icon, Toggle } from "./admin-controls";
@@ -13,7 +12,8 @@ type Props = {
   category: string;
   setCategory: (value: string) => void;
   editDish: (dish: Dish) => void;
-  setMenu: Dispatch<SetStateAction<Dish[]>>;
+  onToggleAvailability: (dish: Dish) => void;
+  onDelete: (dish: Dish) => void;
 };
 
 export function MenuList({
@@ -25,21 +25,9 @@ export function MenuList({
   category,
   setCategory,
   editDish,
-  setMenu,
+  onToggleAvailability,
+  onDelete,
 }: Props) {
-  function toggleAvailability(dishId: string) {
-    setMenu(
-      menu.map((dish) =>
-        dish.id === dishId ? { ...dish, available: !dish.available } : dish,
-      ),
-    );
-  }
-
-  function deleteDish(dish: Dish) {
-    if (!window.confirm(`ลบเมนู “${dish.name}” หรือไม่?`)) return;
-    setMenu(menu.filter((menuItem) => menuItem.id !== dish.id));
-  }
-
   return (
     <>
       <div className={styles.stats}>
@@ -137,7 +125,7 @@ export function MenuList({
                       <Toggle
                         checked={dish.available}
                         label={`สถานะการขาย ${dish.name}`}
-                        onChange={() => toggleAvailability(dish.id)}
+                        onChange={() => onToggleAvailability(dish)}
                       />
                       <span>{dish.available ? "พร้อมขาย" : "หมดชั่วคราว"}</span>
                     </div>
@@ -152,7 +140,7 @@ export function MenuList({
                         <summary aria-label={`ตัวเลือก ${dish.name}`}>
                           ···
                         </summary>
-                        <button onClick={() => deleteDish(dish)}>ลบเมนู</button>
+                        <button onClick={() => onDelete(dish)}>ลบเมนู</button>
                       </details>
                     </div>
                   </td>

@@ -22,16 +22,18 @@ export const menuRoutes: Route[] = [
     handler: withRoleAuth(["manager"], async (ctx: any) => {
       const body = JSON.parse(ctx.event.body ?? "{}");
       
-      if (!body.name || typeof body.price !== "number") {
-        return json(400, { error: "Invalid input: 'name' and 'price' are required" });
+      if (typeof body.name !== "string" || !body.name.trim() || typeof body.price !== "number" || body.price <= 0) {
+        return json(400, { error: "Invalid input: a name and positive numeric price are required" });
       }
 
       const newItem: MenuItem = {
         id: crypto.randomUUID(),
-        name: body.name,
+        name: body.name.trim(),
         price: body.price,
-        imageUrl: body.imageUrl,
-        available: body.available ?? true,
+        imageUrl: typeof body.imageUrl === "string" ? body.imageUrl : undefined,
+        description: typeof body.description === "string" ? body.description : undefined,
+        category: typeof body.category === "string" ? body.category : undefined,
+        available: typeof body.available === "boolean" ? body.available : true,
       };
 
       await db.send(new PutCommand({ 
@@ -70,6 +72,16 @@ export const menuRoutes: Route[] = [
         updateExpressions.push("#imageUrl = :imageUrl");
         expressionAttributeNames["#imageUrl"] = "imageUrl";
         expressionAttributeValues[":imageUrl"] = body.imageUrl;
+      }
+      if (body.description !== undefined) {
+        updateExpressions.push("#description = :description");
+        expressionAttributeNames["#description"] = "description";
+        expressionAttributeValues[":description"] = body.description;
+      }
+      if (body.category !== undefined) {
+        updateExpressions.push("#category = :category");
+        expressionAttributeNames["#category"] = "category";
+        expressionAttributeValues[":category"] = body.category;
       }
       if (body.available !== undefined) {
         updateExpressions.push("#available = :available");

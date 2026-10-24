@@ -231,7 +231,7 @@ pnpm --filter @qr-kitchen/api run dev
 - http://localhost:4000/menu → เมนู 3 รายการ
 - http://localhost:4000/orders → `401 Unauthorized` หากไม่ส่ง Bearer token
 
-### 7.3 ทดสอบ Auth และ role ด้วย Postman
+### 7.3 ทดสอบ Auth, role และ API ด้วย Postman
 
 หลังจากสร้าง DynamoDB tables แล้ว ให้เปิด API ตามข้อ 7.2 และสร้างบัญชีทดสอบในหน้าต่างใหม่:
 
@@ -251,19 +251,36 @@ pnpm --filter @qr-kitchen/api run admin:create manager01 password123 manager
 
 ทำซ้ำโดยเปลี่ยน username เพื่อ login เป็น role อื่น จาก response เก็บค่า `token` แล้วเปิด **Authorization → Bearer Token** ใน request ถัดไป (หรือใส่ header `Authorization: Bearer <token>`). ตรวจ token ด้วย `GET http://localhost:4000/auth/me` ซึ่งควรคืน username และ role ที่ login ไว้
 
-ลองตรวจสิทธิ์ตามนี้:
+เตรียมข้อมูลสำหรับทดสอบ โดยใช้ token ผู้จัดการสร้างโต๊ะชื่อ `5` หากยังไม่มี:
+
+```http
+POST http://localhost:4000/tables
+Authorization: Bearer <manager-token>
+Content-Type: application/json
+
+{"name":"5","seats":4}
+```
+
+จากนั้นใช้ token ลูกค้าสั่งเมนู `m1` ที่มีใน seed:
 
 | Request | Token | ผลที่คาดหวัง |
 |---|---|---|
 | `GET /orders` โดยไม่ใส่ token | ไม่มี | `401 Unauthorized` |
-| `POST /orders` พร้อม `{"tableId":"5","items":[{"menuItemId":"m1","quantity":1}]}` | customer | `201 Created` |
+| `GET /orders` | customer | `403 Forbidden` |
+| `GET /tables` | kitchen หรือ customer | `403 Forbidden` |
+| `POST /orders` พร้อม `{"tableId":"5","items":[{"menuItemId":"m1","quantity":1}]}` | customer | `201 Created` พร้อม `id` |
+| `GET /orders/<id>` | customer เจ้าของออเดอร์ | `200 OK` |
+| `GET /orders/<id>` | customer คนอื่น | `404 Not Found` |
 | `GET /orders` | kitchen หรือ manager | `200 OK` พร้อมรายการออเดอร์ |
-| `PATCH /orders/<id>/status` พร้อม `{"status":"cooking"}` | kitchen หรือ manager | `200 OK` และสถานะเปลี่ยน |
+| `PATCH /orders/<id>/status` พร้อม `{"status":"cooking"}` | kitchen หรือ manager | `200 OK`; ทำต่อ `ready` แล้ว `served` ตามลำดับ |
+| `PATCH /orders/<id>/status` ข้ามลำดับ เช่น `pending` → `served` | kitchen หรือ manager | `409 Conflict` |
 | `POST /menu` พร้อม `{"name":"ข้าวผัด","price":65}` | customer หรือ kitchen | `403 Forbidden` |
 | `POST /menu` พร้อม body เดียวกัน | manager | `201 Created` |
-| `GET /tables` | manager | `501 Not Implemented` (ผ่าน auth แล้ว แต่ route ยังไม่ implement) |
+| `GET /tables` | manager | `200 OK` พร้อมรายการโต๊ะ |
+| `PUT /tables/<id>` พร้อม `{"active":false}` | manager | `200 OK` และโต๊ะถูกปิด |
+| `DELETE /tables/<id>` | manager | `200 OK` |
 
-สิทธิ์โดยสรุป: `customer` สั่งอาหาร, `kitchen` ดูรายการและเปลี่ยนสถานะออเดอร์, `manager` จัดการเมนู/โต๊ะและเข้าถึงงานออเดอร์ทั้งหมด ส่วน `GET /menu` และ `GET /health` เป็น public
+สิทธิ์โดยสรุป: `customer` สั่งอาหารและดูเฉพาะออเดอร์ของตัวเอง, `kitchen` ดูรายการและเปลี่ยนสถานะออเดอร์, `manager` จัดการเมนู/โต๊ะและเข้าถึงงานออเดอร์ทั้งหมด ส่วน `GET /menu` และ `GET /health` เป็น public ใน API
 
 ### 7.4 ตั้งค่าและเปิดหน้าเว็บ (หน้าต่างที่ 3)
 
@@ -279,7 +296,9 @@ NEXT_PUBLIC_API_URL=http://localhost:4000
 pnpm --filter @qr-kitchen/web dev
 ```
 
-เปิด http://localhost:3000/menu/?table=5 ต้องเห็น **โต๊ะ: 5** และเมนู 3 รายการ
+เปิด http://localhost:3000/login/ แล้ว login ด้วยบัญชีที่ role เป็น `customer` หรือเปิด QR `http://localhost:3000/menu/?table=5` ซึ่งจะขอ login แล้วกลับมาที่โต๊ะ 5 หลังสำเร็จ หน้าเมนูต้องเห็นรายการจาก API และสั่งได้เมื่อมีโต๊ะชื่อ 5 ที่เปิดใช้งาน
+
+ทดสอบ `kitchen01` ที่ `/kitchen/` เพื่อดูคิวและเลื่อนสถานะ; ทดสอบ `manager01` ที่ `/admin/` เพื่อเพิ่ม/แก้ไข/ลบเมนูและโต๊ะ ข้อมูลที่แก้ควรเห็นตรงกันหลัง reload และมีผลต่อหน้าเมนู/จอครัวตาม API การเปิดหน้าด้วย role ผิดจะพากลับไปหน้าของ role นั้น และปุ่มออกจากระบบจะพากลับ `/login/`
 
 > หลังแก้ `.env.local` ต้องหยุด (Ctrl+C) แล้วรัน `pnpm dev` ใหม่ Next.js อ่านค่า env ตอนเริ่มเท่านั้น
 
@@ -414,9 +433,10 @@ aws cloudformation deploy --template-file infra/web-hosting.yaml --stack-name qr
 
 | หน้า | ไฟล์ | ผู้ใช้ | สิ่งที่ต้องทำ |
 |---|---|---|---|
-| `/menu/?table=N` | `apps/web/app/menu/page.tsx` | ลูกค้า | ✅ แสดงเมนูแล้ว → เพิ่มตะกร้า, ปรับจำนวน, ปุ่มสั่ง (`POST /orders`), หน้ายืนยัน/สถานะออเดอร์ |
-| `/kitchen/` | `apps/web/app/kitchen/page.tsx` | ครัว | 🔲 แสดงออเดอร์ที่ polling จาก `GET /orders` ทุก 2-3 วินาที, ปุ่มเปลี่ยนสถานะ (`PATCH /orders/:id/status`) |
-| `/admin/` | `apps/web/app/admin/page.tsx` | เจ้าของร้าน | 🔲 จัดการเมนู/ราคา, จัดการโต๊ะ, สร้าง QR Code ของแต่ละโต๊ะ (หน้านี้ต้องมี login ภายหลัง) |
+| `/login/` | `apps/web/app/login/page.tsx` | ทุก role | ✅ login ผ่าน `/auth/login`, เก็บ JWT และส่งต่อไปหน้าตาม role |
+| `/menu/?table=N` | `apps/web/app/menu/page.tsx` | ลูกค้า | ✅ login required; เมนู `/menu`, สั่ง `/orders`, ติดตามเฉพาะออเดอร์ตัวเอง |
+| `/kitchen/` | `apps/web/app/kitchen/page.tsx` | ครัว/ผู้จัดการ | ✅ login required; poll `/orders`, เปลี่ยนสถานะผ่าน `/orders/:id/status` |
+| `/admin/` | `apps/web/app/admin/page.tsx` | ผู้จัดการ | ✅ login required; CRUD `/menu` และ `/tables`, สร้าง QR Code |
 
 สร้างหน้าใหม่ให้ทำโฟลเดอร์ใหม่ใต้ `apps/web/app/` เช่น `app/order-status/page.tsx` และ **ต้องมี URL แบบ `/xxx/` ที่ลงท้ายด้วย `/`**
 

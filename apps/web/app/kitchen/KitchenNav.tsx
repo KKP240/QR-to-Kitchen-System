@@ -2,12 +2,17 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { CookingPot, HeartHandshake, Sprout } from "lucide-react";
+import { CookingPot, HeartHandshake, Settings2, Sprout } from "lucide-react";
+import { SignOutButton, useAuthUser } from "@/components/auth-gate";
 import { thaiDate } from "./kitchen";
 
 const NAV = [{ href: "/kitchen/", label: "หน้าจอครัว", icon: CookingPot }];
 
 export function KitchenNav({ now, children }: { now: number | null; children: ReactNode }) {
+  const user = useAuthUser();
+  const nav = user?.role === "manager"
+    ? [...NAV, { href: "/admin/", label: "จัดการร้าน", icon: Settings2 }]
+    : NAV;
   return (
     <>
       <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-[var(--k-line)] bg-[var(--k-surface)] px-4 sm:h-20 sm:px-7">
@@ -32,8 +37,9 @@ export function KitchenNav({ now, children }: { now: number | null; children: Re
             <span className="grid size-9 place-items-center rounded-full bg-[var(--k-green-soft)] text-xs font-semibold text-[var(--k-green)]">
               บก
             </span>
-            <span className="hidden sm:inline">ทีมครัว</span>
+            <span className="hidden sm:inline">{user?.username ?? "ทีมครัว"}</span>
           </span>
+          <SignOutButton className="text-xs text-[var(--k-muted)] underline underline-offset-4" />
         </div>
       </header>
 
@@ -41,12 +47,12 @@ export function KitchenNav({ now, children }: { now: number | null; children: Re
         <aside className="sticky top-20 hidden min-h-100vh w-52 shrink-0 flex-col justify-between border-r border-[var(--k-line)] bg-[var(--k-surface)] p-3.5 lg:flex">
           <nav>
             <p className="px-1 pb-2 pt-4 text-xs text-[var(--k-muted)]">จัดการร้าน</p>
-            {NAV.map(({ href, label, icon: Icon }) => (
+            {nav.map(({ href, label, icon: Icon }) => (
               <Link
                 key={href}
                 href={href}
                 aria-current="page"
-                className="flex h-11 items-center gap-3 rounded-xl bg-[var(--k-green-soft)] px-3.5 text-sm font-semibold text-[var(--k-green)]"
+                className={`flex h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-semibold ${href === "/kitchen/" ? "bg-[var(--k-green-soft)] text-[var(--k-green)]" : "text-[var(--k-muted)] hover:bg-[var(--k-column)]"}`}
               >
                 <Icon className="size-[18px]" />
                 {label}

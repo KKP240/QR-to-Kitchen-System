@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import styles from "./admin.module.css";
 import { QRCode } from "./qr-code";
 import { Icon } from "./admin-controls";
+import type { MenuItem, RestaurantTable } from "@qr-kitchen/shared";
+import { api } from "@/lib/api";
+import { AuthGate, SignOutButton, useAuthUser } from "@/components/auth-gate";
 import {
   initialMenu,
-  initialTables,
   emptyDish,
   type Dish,
   type Table,
@@ -18,15 +20,33 @@ import { TableList } from "./table-list";
 
 import { MenuEditor } from "./menu-editor";
 
-const STORAGE_KEY = "bai-krapao-admin-v1";
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
-const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+function toDish(item: MenuItem): Dish {
+  return {
+    id: item.id,
+    name: item.name,
+    description: item.description ?? "",
+    category: item.category ?? "จานเดียว",
+    price: item.price,
+    available: item.available,
+    image: item.imageUrl || initialMenu[0].image,
+  };
+}
 
 export default function AdminPage() {
+  return (
+    <AuthGate roles={["manager"]}>
+      <AdminConsole />
+    </AuthGate>
+  );
+}
+
+function AdminConsole() {
+  const user = useAuthUser();
   const [view, setView] = useState<"menu" | "tables" | "edit">("menu");
-  const [menu, setMenu] = useState(initialMenu);
-  const [tables, setTables] = useState(initialTables);
-  const [ready, setReady] = useState(false);
+  const [menu, setMenu] = useState<Dish[]>([]);
+  const [tables, setTables] = useState<Table[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("ทั้งหมด");
   const [draft, setDraft] = useState(emptyDish);
@@ -35,9 +55,7 @@ export default function AdminPage() {
   const [origin, setOrigin] = useState("");
   const [date, setDate] = useState("");
   const [printing, setPrinting] = useState<string[] | null>(null);
-  const fileInput = useRef<HTMLInputElement>(null);
 
-  // โหลดข้อมูลเดิมก่อน เพื่อไม่ให้ข้อมูลตัวอย่างเขียนทับสิ่งที่ผู้ใช้บันทึกไว้
   useEffect(() => {
     setOrigin(window.location.origin);
     setDate(
@@ -48,49 +66,27 @@ export default function AdminPage() {
         timeZone: "Asia/Bangkok",
       }).format(new Date()),
     );
-    try {
-      const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
-      if (
-        data &&
-        Array.isArray(data.menu) &&
-        Array.isArray(data.tables) &&
-        data.menu.every(
-          (dish: Dish) =>
-            typeof dish.id === "string" &&
-            typeof dish.name === "string" &&
-            typeof dish.price === "number" &&
-            typeof dish.image === "string" &&
-            typeof dish.available === "boolean",
-        ) &&
-        data.tables.every(
-          (table: Table) =>
-            typeof table.id === "string" &&
-            typeof table.name === "string" &&
-            typeof table.seats === "number" &&
-            typeof table.active === "boolean",
-        )
-      ) {
-        setMenu(data.menu);
-        setTables(data.tables);
-      }
-    } catch {
-      setNotice("อ่านข้อมูลที่บันทึกไว้ไม่สำเร็จ กำลังใช้ข้อมูลตัวอย่าง");
-    }
-    setReady(true);
-  }, []);
+    let active = true;
+    Promise.all([
+      api<{ items: MenuItem[] }>("/menu"),
+      api<{ tables: RestaurantTable[] }>("/tables"),
+    ])
+      .then(([menuData, tableData]) => {
+        if (!active) return;
+        setMenu(menuData.items.map(toDish));
+        setTables(tableData.tables);
+      })
+      .catch((requestError: unknown) => {
+        if (active) setNotice(requestError instanceof Error ? requestError.message : "โหลดข้อมูลร้านไม่สำเร็จ");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
 
-  // บันทึกทุกครั้งที่แก้ไขเมนูหรือโต๊ะ หลังจากโหลดข้อมูลเดิมเสร็จแล้ว
-  useEffect(() => {
-    if (ready) {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ menu, tables }));
-      } catch {
-        setNotice(
-          "บันทึกไม่สำเร็จ พื้นที่จัดเก็บไม่พร้อมหรือเต็ม การแก้ไขล่าสุดจะหายเมื่อปิดหน้านี้",
-        );
-      }
-    }
-  }, [menu, tables, ready]);
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!notice) return;
@@ -120,40 +116,47 @@ export default function AdminPage() {
     setView("edit");
   }
 
-  function saveDish(event: FormEvent) {
+  async function saveDish(event: FormEvent) {
     event.preventDefault();
-    if (!draft.name.trim() || !Number.isFinite(draft.price) || draft.price <= 0)
-      return;
-    const item = {
-      ...draft,
-      name: draft.name.trim(),
-      id: draft.id || crypto.randomUUID(),
-    };
-    setMenu((items) =>
-      draft.id
-        ? items.map((dish) => (dish.id === draft.id ? item : dish))
-        : [...items, item],
-    );
-    navigate("menu");
-    setNotice("บันทึกเมนูเรียบร้อยแล้ว");
-  }
-
-  function uploadDishImage(file?: File) {
-    if (!file) return;
-    if (
-      !ALLOWED_IMAGE_TYPES.includes(file.type) ||
-      file.size > MAX_IMAGE_SIZE
-    ) {
-      setNotice("เลือกภาพ JPG, PNG หรือ WebP ขนาดไม่เกิน 5 MB");
-      return;
+    if (!draft.name.trim() || !Number.isFinite(draft.price) || draft.price <= 0) return;
+    if (draft.image.trim()) {
+      try {
+        const imageUrl = new URL(draft.image);
+        if (imageUrl.protocol !== "http:" && imageUrl.protocol !== "https:") throw new Error();
+      } catch {
+        setNotice("URL รูปภาพต้องขึ้นต้นด้วย http:// หรือ https://");
+        return;
+      }
     }
-    const reader = new FileReader();
-    reader.onload = () =>
-      setDraft((dish) => ({ ...dish, image: String(reader.result) }));
-    reader.readAsDataURL(file);
+
+    setSaving(true);
+    try {
+      const payload = {
+        name: draft.name.trim(),
+        description: draft.description.trim(),
+        category: draft.category,
+        price: draft.price,
+        available: draft.available,
+        imageUrl: draft.image.trim() || undefined,
+      };
+      const saved = draft.id
+        ? await api<MenuItem>(`/menu/${encodeURIComponent(draft.id)}`, {
+            method: "PUT",
+            body: JSON.stringify(payload),
+          })
+        : await api<MenuItem>("/menu", { method: "POST", body: JSON.stringify(payload) });
+      const item = toDish(saved);
+      setMenu((items) => draft.id ? items.map((dish) => dish.id === item.id ? item : dish) : [...items, item]);
+      navigate("menu");
+      setNotice("บันทึกเมนูเรียบร้อยแล้ว");
+    } catch (requestError) {
+      setNotice(requestError instanceof Error ? requestError.message : "บันทึกเมนูไม่สำเร็จ");
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function saveTable(event: FormEvent) {
+  async function saveTable(event: FormEvent) {
     event.preventDefault();
     if (!tableDraft?.name.trim()) return;
     if (
@@ -165,18 +168,70 @@ export default function AdminPage() {
       setNotice("มีชื่อโต๊ะนี้แล้ว กรุณาใช้ชื่ออื่น");
       return;
     }
-    const item = {
-      ...tableDraft,
-      name: tableDraft.name.trim(),
-      id: tableDraft.id || crypto.randomUUID(),
-    };
-    setTables((items) =>
-      tableDraft.id
-        ? items.map((table) => (table.id === item.id ? item : table))
-        : [...items, item],
-    );
-    setTableDraft(null);
-    setNotice("บันทึกโต๊ะเรียบร้อยแล้ว");
+    setSaving(true);
+    try {
+      const payload = { ...tableDraft, name: tableDraft.name.trim() };
+      const saved = tableDraft.id
+        ? await api<RestaurantTable>(`/tables/${encodeURIComponent(tableDraft.id)}`, {
+            method: "PUT",
+            body: JSON.stringify(payload),
+          })
+        : await api<RestaurantTable>("/tables", { method: "POST", body: JSON.stringify(payload) });
+      setTables((items) => tableDraft.id ? items.map((table) => table.id === saved.id ? saved : table) : [...items, saved]);
+      setTableDraft(null);
+      setNotice("บันทึกโต๊ะเรียบร้อยแล้ว");
+    } catch (requestError) {
+      setNotice(requestError instanceof Error ? requestError.message : "บันทึกโต๊ะไม่สำเร็จ");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function toggleAvailability(dish: Dish) {
+    try {
+      const saved = await api<MenuItem>(`/menu/${encodeURIComponent(dish.id)}`, {
+        method: "PUT",
+        body: JSON.stringify({ available: !dish.available }),
+      });
+      const updated = toDish(saved);
+      setMenu((items) => items.map((item) => item.id === updated.id ? updated : item));
+    } catch (requestError) {
+      setNotice(requestError instanceof Error ? requestError.message : "เปลี่ยนสถานะเมนูไม่สำเร็จ");
+    }
+  }
+
+  async function deleteDish(dish: Dish) {
+    if (!window.confirm(`ลบเมนู “${dish.name}” หรือไม่?`)) return;
+    try {
+      await api(`/menu/${encodeURIComponent(dish.id)}`, { method: "DELETE" });
+      setMenu((items) => items.filter((item) => item.id !== dish.id));
+      setNotice("ลบเมนูเรียบร้อยแล้ว");
+    } catch (requestError) {
+      setNotice(requestError instanceof Error ? requestError.message : "ลบเมนูไม่สำเร็จ");
+    }
+  }
+
+  async function toggleTable(table: Table) {
+    try {
+      const saved = await api<RestaurantTable>(`/tables/${encodeURIComponent(table.id)}`, {
+        method: "PUT",
+        body: JSON.stringify({ active: !table.active }),
+      });
+      setTables((items) => items.map((item) => item.id === saved.id ? saved : item));
+    } catch (requestError) {
+      setNotice(requestError instanceof Error ? requestError.message : "เปลี่ยนสถานะโต๊ะไม่สำเร็จ");
+    }
+  }
+
+  async function deleteTable(table: Table) {
+    try {
+      await api(`/tables/${encodeURIComponent(table.id)}`, { method: "DELETE" });
+      setTables((items) => items.filter((item) => item.id !== table.id));
+      setTableDraft(null);
+      setNotice("ลบโต๊ะเรียบร้อยแล้ว");
+    } catch (requestError) {
+      setNotice(requestError instanceof Error ? requestError.message : "ลบโต๊ะไม่สำเร็จ");
+    }
   }
 
   const filteredMenu = menu.filter(
@@ -186,7 +241,7 @@ export default function AdminPage() {
   );
   const availableMenuCount = menu.filter((dish) => dish.available).length;
   const getTableUrl = (table: Table) =>
-    `${origin}/menu/?table=${encodeURIComponent(table.id)}`;
+    `${origin}/menu/?table=${encodeURIComponent(table.name)}`;
 
   return (
     <div className={styles.shell}>
@@ -205,10 +260,11 @@ export default function AdminPage() {
           <span className={styles.storeStatus}>
             <i /> ร้านเปิดอยู่
           </span>
-          <span className={styles.profile}>
+            <span className={styles.profile}>
             <b>บก</b>
-            <span>เจ้าของร้าน</span>
+              <span>{user?.username ?? "ผู้จัดการ"}</span>
           </span>
+            <SignOutButton className={styles.signOut} />
         </div>
       </header>
       <aside className={styles.sidebar}>
@@ -286,7 +342,8 @@ export default function AdminPage() {
             </button>
           )}
         </div>
-        {view === "menu" && (
+        {loading ? <p role="status">กำลังโหลดข้อมูลร้าน...</p> : null}
+        {view === "menu" && !loading && (
           <MenuList
             menu={menu}
             availableMenuCount={availableMenuCount}
@@ -296,17 +353,18 @@ export default function AdminPage() {
             category={category}
             setCategory={setCategory}
             editDish={editDish}
-            setMenu={setMenu}
+            onToggleAvailability={toggleAvailability}
+            onDelete={deleteDish}
           />
         )}
-        {view === "tables" && (
+        {view === "tables" && !loading && (
           <TableList
             tables={tables}
             search={search}
             setSearch={setSearch}
             setPrinting={setPrinting}
             setTableDraft={setTableDraft}
-            setTables={setTables}
+            onToggle={toggleTable}
             getTableUrl={getTableUrl}
           />
         )}
@@ -315,14 +373,12 @@ export default function AdminPage() {
             draft={draft}
             setDraft={setDraft}
             saveDish={saveDish}
-            fileInput={fileInput}
-            uploadDishImage={uploadDishImage}
             navigate={navigate}
+            saving={saving}
           />
         )}
         <p className={styles.localNote}>
-          โหมดตัวอย่าง · บันทึกข้อมูลเฉพาะเบราว์เซอร์นี้ ยังไม่เชื่อมต่อ API
-          หลังบ้าน
+          ข้อมูลเมนูและโต๊ะบันทึกผ่าน API
         </p>
       </main>
       {notice && (
@@ -387,10 +443,8 @@ export default function AdminPage() {
                   className={styles.danger}
                   onClick={() => {
                     if (window.confirm(`ลบโต๊ะ ${tableDraft.name} หรือไม่?`)) {
-                      setTables(
-                        tables.filter((table) => table.id !== tableDraft.id),
-                      );
-                      setTableDraft(null);
+                      const selectedTable = tables.find((table) => table.id === tableDraft.id);
+                      if (selectedTable) void deleteTable(selectedTable);
                     }
                   }}
                 >

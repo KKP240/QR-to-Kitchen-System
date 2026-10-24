@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import type { MenuItem, Order } from "@qr-kitchen/shared";
 import { api } from "@/lib/api";
+import { AuthGate, SignOutButton, useAuthUser } from "@/components/auth-gate";
 import styles from "./menu.module.css";
 import { MenuView } from "./menu-view";
 import { CartView } from "./cart-view";
@@ -26,9 +27,11 @@ type Screen = "menu" | "cart" | "tracking";
 
 export default function MenuPage() {
   return (
-    <Suspense fallback={<MenuPageFallback />}>
-      <MenuPageContent />
-    </Suspense>
+    <AuthGate roles={["customer"]}>
+      <Suspense fallback={<MenuPageFallback />}>
+        <MenuPageContent />
+      </Suspense>
+    </AuthGate>
   );
 }
 
@@ -365,6 +368,7 @@ function MenuPageContent() {
 }
 
 function MenuTopBar({ table }: { table: string }) {
+  const user = useAuthUser();
   return (
     <header className={styles.topbar}>
       <div className={styles.brand}>
@@ -373,12 +377,14 @@ function MenuTopBar({ table }: { table: string }) {
         </span>
         <div className={styles.brandText}>
           <strong className={styles.brandName}>ใบกะเพรา</strong>
+          <small className={styles.brandMeta}>{user?.username}</small>
         </div>
       </div>
       <span className={styles.tableChip}>
         <ChairIcon size={12} />
         โต๊ะ {table}
       </span>
+      <SignOutButton className={styles.logoutButton} />
     </header>
   );
 }
@@ -402,6 +408,7 @@ function SubTopBar({
         <ChairIcon size={12} />
         โต๊ะ {table}
       </span>
+      <SignOutButton className={styles.logoutButton} />
     </header>
   );
 }

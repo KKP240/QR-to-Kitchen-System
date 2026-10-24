@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "cn";
+import { AuthGate } from "@/components/auth-gate";
 import {
   COLUMNS,
   POLL_MS,
@@ -26,6 +27,14 @@ import { KitchenNav } from "./KitchenNav";
 import { OrderColumn } from "./OrderColumn";
 
 export default function KitchenPage() {
+  return (
+    <AuthGate roles={["kitchen", "manager"]}>
+      <KitchenBoard />
+    </AuthGate>
+  );
+}
+
+function KitchenBoard() {
   const { orders, menu, loading, connected, updatedAt, pendingIds, actionError, advance } = useKitchenOrders();
   const now = useNow(15000);
 

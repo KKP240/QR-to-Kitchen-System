@@ -1,5 +1,6 @@
+import { ConditionalCheckFailedException } from "@aws-sdk/client-dynamodb";
 import { GetCommand, PutCommand, ScanCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import type { Order, OrderStatus } from "@qr-kitchen/shared";
+import type { MenuItem, Order, OrderItem, OrderStatus, RestaurantTable } from "@qr-kitchen/shared";
 import { db } from "../lib/dynamo";
 import { TABLES } from "../lib/config";
 import { json } from "../lib/response";
@@ -14,32 +15,49 @@ export const orderRoutes: Route[] = [
     method: "POST",
     path: "/orders",
     handler: withRoleAuth(["customer"], async (ctx: any) => {
-      const body = JSON.parse(ctx.event.body ?? "{}");
+      let body: any;
+      try {
+        body = JSON.parse(ctx.event.body ?? "{}");
+      } catch {
+        return json(400, { error: "Invalid JSON" });
+      }
 
-      // Validation เบื้องต้นตาม Contract
-      if (!body.tableId || !Array.isArray(body.items) || body.items.length === 0) {
+      if (typeof body.tableId !== "string" || !body.tableId.trim() || !Array.isArray(body.items) || body.items.length === 0) {
         return json(400, { error: "Invalid input: 'tableId' and 'items' (with at least 1 item) are required" });
       }
 
-      // ตรวจสอบรูปแบบของ OrderItem
-      for (const item of body.items) {
-        if (!item.menuItemId || typeof item.quantity !== "number" || item.quantity <= 0) {
-          return json(400, { error: "Invalid item format: each item must have 'menuItemId' and 'quantity' > 0" });
-        }
+      const tableResult = await db.send(new ScanCommand({ TableName: TABLES.tables }));
+      const table = ((tableResult.Items ?? []) as RestaurantTable[]).find(
+        (item) => item.id === body.tableId.trim() || item.name === body.tableId.trim(),
+      );
+      if (!table || !table.active) {
+        return json(400, { error: "Table not found or inactive" });
       }
 
+      const orderItems: OrderItem[] = [];
+      for (const item of body.items) {
+        if (typeof item.menuItemId !== "string" || !item.menuItemId || !Number.isInteger(item.quantity) || item.quantity <= 0) {
+          return json(400, { error: "Invalid item format: menuItemId and a positive integer quantity are required" });
+        }
+        const menuResult = await db.send(new GetCommand({ TableName: TABLES.menu, Key: { id: item.menuItemId } }));
+        const menuItem = menuResult.Item as MenuItem | undefined;
+        if (!menuItem || !menuItem.available) {
+          return json(400, { error: `Menu item '${item.menuItemId}' is unavailable` });
+        }
+        orderItems.push({ menuItemId: menuItem.id, name: menuItem.name, price: menuItem.price, quantity: item.quantity });
+      }
+
+      const createdAt = new Date().toISOString();
       const newOrder: Order = {
-      id: crypto.randomUUID(),
-      tableId: String(body.tableId),
-      items: body.items,
-      status: "pending",
-      createdAt: new Date().toISOString(),
-      note: typeof body.note === "string" && body.note.trim() ? body.note.trim() : undefined,
-      statusHistory: [{              // ← เพิ่มบรรทัดนี้
+        id: crypto.randomUUID(),
+        tableId: table.name,
+        items: orderItems,
         status: "pending",
-        timestamp: new Date().toISOString()
-      }]
-    };
+        createdAt,
+        customerUsername: ctx.user.sub,
+        note: typeof body.note === "string" && body.note.trim() ? body.note.trim().slice(0, 500) : undefined,
+        statusHistory: [{ status: "pending", timestamp: createdAt }],
+      };
 
       await db.send(new PutCommand({
         TableName: TABLES.orders,
@@ -86,7 +104,7 @@ export const orderRoutes: Route[] = [
   {
   method: "GET",
   path: "/orders/:id",
-  handler: withRoleAuth(["kitchen", "manager"], async (ctx: any) => {
+  handler: withRoleAuth(["customer", "kitchen", "manager"], async (ctx: any) => {
     const id = ctx.params?.id;
     if (!id) return json(400, { error: "Missing 'id' in path" });
 
@@ -96,6 +114,9 @@ export const orderRoutes: Route[] = [
     }));
 
     if (!result.Item) {
+      return json(404, { error: "Order not found" });
+    }
+    if (ctx.user.role === "customer" && result.Item.customerUsername !== ctx.user.sub) {
       return json(404, { error: "Order not found" });
     }
 
@@ -122,27 +143,50 @@ export const orderRoutes: Route[] = [
         });
       }
 
-      const result = await db.send(new UpdateCommand({
+      const currentResult = await db.send(new GetCommand({ TableName: TABLES.orders, Key: { id } }));
+      const currentOrder = currentResult.Item as Order | undefined;
+      if (!currentOrder) return json(404, { error: "Order not found" });
+      const nextStatus: Partial<Record<OrderStatus, OrderStatus>> = {
+        pending: "cooking",
+        cooking: "ready",
+        ready: "served",
+      };
+      if (nextStatus[currentOrder.status] !== newStatus) {
+        return json(409, { error: `Order status can only move from ${currentOrder.status} to ${nextStatus[currentOrder.status] ?? "no further status"}` });
+      }
+
+      const timestamp = new Date().toISOString();
+      const timestampUpdate = newStatus === "cooking" ? ", startedAt = :timestamp" : newStatus === "served" ? ", servedAt = :timestamp" : "";
+
+      let result;
+      try {
+        result = await db.send(new UpdateCommand({
       TableName: TABLES.orders,
       Key: { id },
       UpdateExpression: `SET #status = :status, 
                         #updatedAt = :updatedAt,
-                        statusHistory = list_append(if_not_exists(statusHistory, :empty_list), :new_history)`,
+                        statusHistory = list_append(if_not_exists(statusHistory, :empty_list), :new_history)${timestampUpdate}`,
       ExpressionAttributeNames: { 
         "#status": "status",
         "#updatedAt": "updatedAt"
       },
-      ExpressionAttributeValues: { 
+      ConditionExpression: "#status = :previousStatus",
+      ExpressionAttributeValues: {
         ":status": newStatus,
-        ":updatedAt": new Date().toISOString(),
-        ":new_history": [{
-          status: newStatus,
-          timestamp: new Date().toISOString()
-        }],
-        ":empty_list": []
+        ":updatedAt": timestamp,
+        ":new_history": [{ status: newStatus, timestamp }],
+        ":empty_list": [],
+        ":previousStatus": currentOrder.status,
+        ...(timestampUpdate ? { ":timestamp": timestamp } : {}),
       },
       ReturnValues: "ALL_NEW",
-    }));
+        }));
+      } catch (error) {
+        if (error instanceof ConditionalCheckFailedException) {
+          return json(409, { error: "Order status changed; refresh and try again" });
+        }
+        throw error;
+      }
 
       if (!result.Attributes) {
         return json(404, { error: "Order not found" });
