@@ -12,6 +12,7 @@ const definitions = [
   { name: TABLES.orders, key: "id" },
   { name: TABLES.tables, key: "id" },
   { name: TABLES.connections, key: "connectionId" },
+  { name: TABLES.users, key: "username" },
 ];
 
 async function waitForDb(retries = 20) {

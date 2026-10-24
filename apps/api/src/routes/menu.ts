@@ -4,6 +4,7 @@ import { db } from "../lib/dynamo";
 import { TABLES } from "../lib/config";
 import { json } from "../lib/response";
 import type { Route } from "../lib/types";
+import { withAuth } from "../lib/auth";
 
 export const menuRoutes: Route[] = [
   {

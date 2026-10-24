@@ -10,6 +10,15 @@ if "%ACCOUNT_ID%"=="" (
 )
 echo Deploying to account %ACCOUNT_ID%
 
+set SECRET_FILE=%USERPROFILE%\.qrk-jwt-secret
+if not exist "%SECRET_FILE%" powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0new-secret.ps1" > "%SECRET_FILE%"
+set JWT_SECRET=
+set /p JWT_SECRET=<"%SECRET_FILE%"
+if "%JWT_SECRET%"=="" (
+  echo Cannot read JWT secret from %SECRET_FILE%
+  exit /b 1
+)
+
 call sam build
 if errorlevel 1 exit /b 1
-call sam deploy --role-arn arn:aws:iam::%ACCOUNT_ID%:role/LabRole --no-fail-on-empty-changeset
+call sam deploy --role-arn arn:aws:iam::%ACCOUNT_ID%:role/LabRole --no-fail-on-empty-changeset --parameter-overrides JwtSecret=%JWT_SECRET%

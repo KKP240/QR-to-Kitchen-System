@@ -6,7 +6,8 @@
   "dev": "tsx watch src/local/server.ts",
   "db:create": "tsx src/local/create-tables.ts",
   "db:seed": "tsx src/local/seed.ts",
-  "typecheck": "tsc --noEmit"
+  "typecheck": "tsc --noEmit",
+  "admin:create": "tsx src/local/create-admin.ts"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.1151.0",
