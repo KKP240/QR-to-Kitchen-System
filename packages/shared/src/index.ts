@@ -21,4 +21,9 @@ export interface Order {
   items: OrderItem[];
   status: OrderStatus;
   createdAt: string;
+  updatedAt?: string;
+  statusHistory?: {   
+    status: OrderStatus;
+    timestamp: string;
+  }[];
 }
