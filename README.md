@@ -354,45 +354,54 @@ aws cloudformation describe-stacks --stack-name qr-kitchen --query "Stacks[0].Ou
 
 ### 8.3 Seed ข้อมูลและสร้าง staff account บน AWS
 
-เครื่องของเรา (`voclabs`) เขียน DynamoDB บน AWS โดยตรงไม่ได้ ให้ Lambda ที่ใช้ `LabRole` ทำแทน Seed เติมเมนูตัวอย่างและโต๊ะ 1–8 โดยเพิ่มเฉพาะรายการที่ยังไม่มี รันซ้ำได้และไม่เขียนทับข้อมูลเดิม:
+เครื่องของเรา (`voclabs`) เขียน DynamoDB บน AWS โดยตรงไม่ได้ จึงมี Lambda ที่ใช้ `LabRole` ทำแทน และมีสคริปต์ครอบให้ ไม่ต้องหาชื่อฟังก์ชันหรือสร้างไฟล์ JSON เอง (ทุกคำสั่งในข้อนี้ต้อง deploy ข้อ 8.2 ผ่านแล้ว และ credentials ยังไม่หมดอายุ)
+
+#### 1 Seed เมนูและโต๊ะ
 
 ```bat
-aws lambda list-functions --query "Functions[?contains(FunctionName, 'SeedFunction') || contains(FunctionName, 'CreateAdminFunction')].FunctionName" --output table --region us-east-1
-aws lambda invoke --function-name <SeedFunction-name> --region us-east-1 --cli-binary-format raw-in-base64-out --payload "{}" seed-result.json
-type seed-result.json
+pnpm aws:seed
 ```
 
-ผลลัพธ์รายงาน `menu.inserted`, `menu.existing`, `menu.skippedDuplicateName`, `tables.inserted` และ `tables.existing`; ค่า inserted เปลี่ยนตามข้อมูลที่มีอยู่แล้วและ seed ไม่เขียนทับข้อมูลเดิม ตรวจเมนู/โต๊ะได้จาก Postman ด้วย `<ApiUrl>/menu` และ `GET <ApiUrl>/tables` (ต้องใช้ manager token)
+- เติมเมนูตัวอย่างและโต๊ะ 1-8 โดยเพิ่มเฉพาะรายการที่ยังไม่มี **รันซ้ำได้ ไม่เขียนทับข้อมูลที่แก้แล้ว**
+- ผลลัพธ์รายงาน `menu.inserted`, `menu.existing`, `menu.skippedDuplicateName`, `tables.inserted`, `tables.existing` (ค่า inserted เปลี่ยนตามข้อมูลที่มีอยู่แล้ว)
+- ตรวจผลด้วย Postman: `GET <ApiUrl>/menu` (public) และ `GET <ApiUrl>/tables` (ต้องใช้ manager token)
 
-สร้างบัญชี manager และ kitchen แบบไม่ต้องสร้าง JSON หรือจำชื่อ Lambda function:
+#### 2 สร้าง staff account
 
 ```bat
 pnpm aws:staff manager01 manager
 pnpm aws:staff kitchen01 kitchen
 ```
 
-แต่ละคำสั่งจะถามรหัสผ่านแบบซ่อนใน terminal (อย่างน้อย 8 ตัว), หา `CreateAdminFunction` ใน `us-east-1`, invoke Lambda และลบ payload ชั่วคราวให้อัตโนมัติ ถ้าใช้ username เดิมอีกครั้ง จะเปลี่ยนรหัสผ่านและ role ของบัญชีนั้น ลูกค้าไม่ต้องมีบัญชี
+| Role | ทำอะไรได้ |
+|---|---|
+| `manager` | จัดการเมนู/โต๊ะ และงานออเดอร์ทั้งหมด (`/admin/`, `/kitchen/`) |
+| `kitchen` | ดูคิวและเปลี่ยนสถานะออเดอร์ (`/kitchen/`) |
 
-ลบบัญชี staff ที่ไม่ใช้แล้วได้โดยสร้าง `delete-event.json`:
+- รูปแบบคำสั่ง: `pnpm aws:staff <username> <manager|kitchen>`
+- สคริปต์จะ **ถามรหัสผ่านแบบซ่อนใน terminal** (อย่างน้อย 8 ตัว) หา `CreateAdminFunction` ใน `us-east-1` แล้ว invoke และ **ลบไฟล์ payload ชั่วคราวให้อัตโนมัติ** จึงไม่ต้องพิมพ์รหัสผ่านในคำสั่งหรือเก็บไฟล์ไว้
+- ใช้ username เดิมอีกครั้ง = **เปลี่ยนรหัสผ่านและ role** ของบัญชีนั้น (ใช้รีเซ็ตรหัสผ่านที่ลืมได้)
+- ลูกค้าไม่ต้องมีบัญชี และไม่มี public sign-up endpoint
+- ตั้งรหัสผ่านที่เดายากสำหรับบัญชีบน AWS (ตัวอย่าง `password123` ในข้อ 7.3 ใช้เฉพาะบนเครื่อง)
+
+#### 3 ลบ staff account ที่ไม่ใช้แล้ว (ยังเป็นขั้นตอน manual)
+
+สร้างไฟล์ `delete-event.json` (ห้าม commit):
 
 ```json
 {"username":"manager01","action":"delete"}
 ```
 
-แล้วเรียก helper เดิม:
-
 ```bat
-aws lambda invoke --function-name <CreateAdminFunction-name> --region us-east-1 --cli-binary-format raw-in-base64-out --payload fileb://delete-event.json delete-result.json
+aws cloudformation describe-stack-resource --stack-name qr-kitchen --logical-resource-id CreateAdminFunction --query StackResourceDetail.PhysicalResourceId --output text --region us-east-1
+aws lambda invoke --function-name <ชื่อฟังก์ชันที่ได้จากคำสั่งบน> --region us-east-1 --cli-binary-format raw-in-base64-out --payload fileb://delete-event.json delete-result.json
 type delete-result.json
+del delete-event.json delete-result.json
 ```
 
-การลบนี้กระทบเฉพาะบัญชีใน `qrk-Users` ไม่ลบ order history
+การลบกระทบเฉพาะบัญชีใน `qrk-Users` ไม่ลบ order history
 
-```bat
-del manager-event.json manager-result.json kitchen-event.json kitchen-result.json delete-event.json delete-result.json
-```
-
-บรรทัด `del` ใช้เฉพาะไฟล์ event/result ที่สร้างด้วยวิธี manual; `pnpm aws:staff` สร้างและลบ payload ชั่วคราวให้อัตโนมัติ
+> ถ้าสคริปต์ขึ้นว่าหาฟังก์ชันไม่เจอ แปลว่ายังไม่ได้ deploy stack `qr-kitchen` หรือ Lab ถูกรีเซ็ต ให้รัน `pnpm run deploy` ก่อน
 
 ### 8.4 Deploy หน้าเว็บ (S3 + CloudFront)
 
