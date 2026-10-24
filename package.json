@@ -7,6 +7,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "aws:creds": "powershell -ExecutionPolicy Bypass -File scripts/set-aws-credentials.ps1",
     "aws:whoami": "aws sts get-caller-identity",
+    "aws:staff": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/create-staff.ps1",
     "deploy": "scripts\\deploy.bat",
     "web:deploy": "scripts\\deploy-web.bat"
   },

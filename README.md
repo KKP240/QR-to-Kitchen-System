@@ -364,20 +364,14 @@ type seed-result.json
 
 ผลลัพธ์รายงาน `menu.inserted`, `menu.existing`, `menu.skippedDuplicateName`, `tables.inserted` และ `tables.existing`; ค่า inserted เปลี่ยนตามข้อมูลที่มีอยู่แล้วและ seed ไม่เขียนทับข้อมูลเดิม ตรวจเมนู/โต๊ะได้จาก Postman ด้วย `<ApiUrl>/menu` และ `GET <ApiUrl>/tables` (ต้องใช้ manager token)
 
-สร้าง manager และ kitchen account ผ่าน `CreateAdminFunction` ซึ่งไม่มี public URL ใช้ AWS CLI จากเครื่องที่มี Lab credentials สร้างไฟล์ `manager-event.json` ชั่วคราว:
-
-```json
-{"username":"manager01","password":"ใส่รหัสผ่านอย่างน้อย 8 ตัว","role":"manager"}
-```
-
-จากนั้นเรียก Lambda:
+สร้างบัญชี manager และ kitchen แบบไม่ต้องสร้าง JSON หรือจำชื่อ Lambda function:
 
 ```bat
-aws lambda invoke --function-name <CreateAdminFunction-name> --region us-east-1 --cli-binary-format raw-in-base64-out --payload fileb://manager-event.json manager-result.json
-type manager-result.json
+pnpm aws:staff manager01 manager
+pnpm aws:staff kitchen01 kitchen
 ```
 
-เปลี่ยน role เป็น `kitchen` และ username/password สำหรับบัญชีครัว แล้วเรียกซ้ำโดยใช้ชื่อไฟล์ event/result คนละชื่อ ถ้าไม่ส่ง role helper จะสร้าง manager; รองรับเฉพาะ `manager` และ `kitchen` (ลูกค้าไม่ต้องมีบัญชี)
+แต่ละคำสั่งจะถามรหัสผ่านแบบซ่อนใน terminal (อย่างน้อย 8 ตัว), หา `CreateAdminFunction` ใน `us-east-1`, invoke Lambda และลบ payload ชั่วคราวให้อัตโนมัติ ถ้าใช้ username เดิมอีกครั้ง จะเปลี่ยนรหัสผ่านและ role ของบัญชีนั้น ลูกค้าไม่ต้องมีบัญชี
 
 ลบบัญชี staff ที่ไม่ใช้แล้วได้โดยสร้าง `delete-event.json`:
 
@@ -394,11 +388,11 @@ type delete-result.json
 
 การลบนี้กระทบเฉพาะบัญชีใน `qrk-Users` ไม่ลบ order history
 
-ไฟล์ event มี password ห้าม commit และลบหลังใช้:
-
 ```bat
-del manager-event.json manager-result.json kitchen-event.json kitchen-result.json
+del manager-event.json manager-result.json kitchen-event.json kitchen-result.json delete-event.json delete-result.json
 ```
+
+บรรทัด `del` ใช้เฉพาะไฟล์ event/result ที่สร้างด้วยวิธี manual; `pnpm aws:staff` สร้างและลบ payload ชั่วคราวให้อัตโนมัติ
 
 ### 8.4 Deploy หน้าเว็บ (S3 + CloudFront)
 

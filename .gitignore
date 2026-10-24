@@ -12,6 +12,12 @@ coverage
 *.pem
 admin.json
 admin-out.json
+manager-event.json
+manager-result.json
+kitchen-event.json
+kitchen-result.json
+delete-event.json
+delete-result.json
 
 # AWS credentials
 .aws/
