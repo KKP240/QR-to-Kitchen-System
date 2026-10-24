@@ -34,6 +34,7 @@ export const orderRoutes: Route[] = [
       items: body.items,
       status: "pending",
       createdAt: new Date().toISOString(),
+      note: typeof body.note === "string" && body.note.trim() ? body.note.trim() : undefined,
       statusHistory: [{              // ← เพิ่มบรรทัดนี้
         status: "pending",
         timestamp: new Date().toISOString()

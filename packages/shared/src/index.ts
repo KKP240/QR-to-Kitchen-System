@@ -6,6 +6,9 @@ export interface MenuItem {
   price: number;
   imageUrl?: string;
   available: boolean;
+  description?: string;
+  category?: string;
+  recommended?: boolean;
 }
 
 export interface OrderItem {
@@ -22,6 +25,7 @@ export interface Order {
   status: OrderStatus;
   createdAt: string;
   updatedAt?: string;
+  note?: string;
   statusHistory?: {   
     status: OrderStatus;
     timestamp: string;
