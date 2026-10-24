@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="AWS architecture overview for QR-to-Kitchen System">
+  <title>AWS Architecture | QR-to-Kitchen</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1d312b;
+      --muted: #60716a;
+      --line: #d6e0da;
+      --paper: #fbfcf9;
+      --canvas: #eef3ef;
+      --green: #176b53;
+      --green-soft: #e1f1e9;
+      --blue: #275c83;
+      --blue-soft: #e7f0f6;
+      --amber: #966018;
+      --amber-soft: #f7eedc;
+      --violet: #63528a;
+      --violet-soft: #eeeafa;
+      --shadow: 0 18px 46px rgb(30 59 46 / 8%);
+    }
+
+    * { box-sizing: border-box; }
+    html { min-width: 320px; background: var(--canvas); }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        linear-gradient(140deg, rgb(221 236 227 / 64%), transparent 34rem),
+        radial-gradient(ellipse at 95% 8%, rgb(227 237 244 / 85%), transparent 30rem),
+        var(--canvas);
+      font-family: "Leelawadee UI", "Noto Sans Thai", Tahoma, sans-serif;
+      line-height: 1.55;
+    }
+    button { font: inherit; }
+    .shell { width: min(1480px, calc(100% - 48px)); margin: 0 auto; padding: 38px 0 54px; }
+    .topline { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 25px; }
+    .brand { display: flex; align-items: center; gap: 11px; color: var(--ink); font-size: 13px; font-weight: 700; }
+    .brand-mark { display: grid; width: 36px; height: 36px; place-items: center; color: white; background: var(--green); border-radius: 10px; font-size: 13px; }
+    .eyebrow { margin: 0; color: var(--green); font-size: 11px; font-weight: 800; letter-spacing: .11em; text-transform: uppercase; }
+    .print-button { display: inline-flex; align-items: center; gap: 8px; padding: 9px 13px; color: var(--ink); background: white; border: 1px solid var(--line); border-radius: 7px; cursor: pointer; font-size: 12px; font-weight: 650; }
+    .print-button:hover { border-color: #90aa9c; background: #f7faf7; }
+    h1 { max-width: 850px; margin: 7px 0 9px; font-size: clamp(29px, 3vw, 43px); line-height: 1.2; letter-spacing: 0; }
+    .intro { max-width: 850px; margin: 0; color: var(--muted); font-size: 15px; }
+    .meta-row { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 19px; }
+    .meta { display: inline-flex; align-items: center; gap: 7px; padding: 7px 10px; color: #38554a; background: rgb(255 255 255 / 72%); border: 1px solid #dce6df; border-radius: 6px; font-size: 11px; font-weight: 650; }
+    .meta b { color: var(--green); }
+
+    .board-wrap { margin-top: 28px; overflow-x: auto; border: 1px solid #d8e2dc; border-radius: 13px; background: var(--paper); box-shadow: var(--shadow); scrollbar-color: #a8bdb0 #edf2ee; }
+    .board-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 15px 19px; border-bottom: 1px solid var(--line); }
+    .board-title { margin: 0; font-size: 13px; font-weight: 750; }
+    .legend { display: flex; flex-wrap: wrap; gap: 12px; color: var(--muted); font-size: 10px; }
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .swatch { width: 8px; height: 8px; border-radius: 50%; }
+    .swatch.green { background: var(--green); }
+    .swatch.blue { background: var(--blue); }
+    .swatch.amber { background: var(--amber); }
+    .svg-scroll { min-width: 1050px; padding: 13px 14px 18px; }
+    svg { display: block; width: 100%; height: auto; font-family: "Leelawadee UI", "Noto Sans Thai", Tahoma, sans-serif; }
+    .zone { fill: #f6f9f6; stroke: #bdcec3; stroke-width: 1.4; stroke-dasharray: 5 6; }
+    .zone-label { fill: #587267; font-size: 12px; font-weight: 800; letter-spacing: .08em; }
+    .zone-sub { fill: #809289; font-size: 9px; }
+    .actor { fill: #fff; stroke: #cfdad3; stroke-width: 1.2; }
+    .node { fill: #fff; stroke: #cfdad3; stroke-width: 1.2; }
+    .node-green { fill: #f0f8f3; stroke: #98c3aa; }
+    .node-blue { fill: #f1f7fb; stroke: #a8c4d7; }
+    .node-amber { fill: #fff9ef; stroke: #ddc391; }
+    .node-violet { fill: #f7f5fc; stroke: #c1b8df; }
+    .icon-green { fill: var(--green); }
+    .icon-blue { fill: var(--blue); }
+    .icon-amber { fill: var(--amber); }
+    .icon-violet { fill: var(--violet); }
+    .icon-letter { fill: white; font-size: 10px; font-weight: 850; text-anchor: middle; dominant-baseline: central; }
+    .node-title { fill: var(--ink); font-size: 14px; font-weight: 800; }
+    .node-desc { fill: #53675e; font-size: 10px; }
+    .node-detail { fill: #7b8b83; font-size: 9px; }
+    .flow-label { fill: #49655a; font-size: 9px; font-weight: 750; paint-order: stroke; stroke: var(--paper); stroke-width: 4px; stroke-linejoin: round; }
+    .line-web { fill: none; stroke: var(--green); stroke-width: 2.1; marker-end: url(#arrow-green); }
+    .line-api { fill: none; stroke: var(--blue); stroke-width: 2.1; marker-start: url(#arrow-blue-start); marker-end: url(#arrow-blue); }
+    .line-ops { fill: none; stroke: var(--amber); stroke-width: 2; stroke-dasharray: 6 5; marker-end: url(#arrow-amber); }
+    .line-data { fill: none; stroke: #54876c; stroke-width: 2.1; marker-start: url(#arrow-data-start); marker-end: url(#arrow-data); }
+    .small-note { fill: #788981; font-size: 8px; }
+
+    .section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin: 34px 0 13px; }
+    .section-heading h2 { margin: 0; font-size: 18px; }
+    .section-heading p { margin: 0; color: var(--muted); font-size: 11px; }
+    .data-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+    .data-card { min-height: 123px; padding: 14px; background: rgb(255 255 255 / 82%); border: 1px solid var(--line); border-radius: 8px; }
+    .data-card .table-icon { display: grid; width: 26px; height: 26px; place-items: center; color: var(--green); background: var(--green-soft); border-radius: 6px; font-size: 10px; font-weight: 850; }
+    .data-card h3 { margin: 11px 0 3px; font-size: 12px; }
+    .data-card p { margin: 0; color: var(--muted); font-size: 10px; }
+    .data-card code { color: #315d49; font-family: Consolas, monospace; font-size: 10px; }
+    .data-card.unused { background: #f8f8f6; border-style: dashed; }
+    .data-card.unused .table-icon { color: #69766f; background: #e9eeea; }
+
+    .flows { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .flow-card { min-height: 150px; padding: 17px 18px; background: #fff; border: 1px solid var(--line); border-top: 3px solid var(--green); border-radius: 8px; }
+    .flow-card.staff { border-top-color: var(--blue); }
+    .flow-card.ops { border-top-color: var(--amber); }
+    .flow-number { color: var(--muted); font-family: Consolas, monospace; font-size: 10px; font-weight: 800; }
+    .flow-card h3 { margin: 7px 0 6px; font-size: 14px; }
+    .flow-card p { margin: 0; color: var(--muted); font-size: 11px; }
+    .flow-card strong { color: var(--ink); }
+
+    .notes { display: grid; grid-template-columns: 1.15fr 1fr 1fr; gap: 12px; margin-top: 26px; }
+    .note { padding: 15px 17px; color: #4e6258; background: #e6eee8; border-radius: 7px; font-size: 10px; }
+    .note.warn { color: #725222; background: var(--amber-soft); }
+    .note h3 { margin: 0 0 5px; color: var(--ink); font-size: 11px; }
+    .note p { margin: 0; }
+    .footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin-top: 24px; padding-top: 14px; color: #74847b; border-top: 1px solid #d5dfd8; font-size: 10px; }
+    .footer a { color: #315d49; }
+
+    @media (max-width: 900px) {
+      .shell { width: min(100% - 28px, 740px); padding-top: 25px; }
+      .data-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .flows, .notes { grid-template-columns: 1fr; }
+      .section-heading { align-items: flex-start; flex-direction: column; gap: 4px; }
+    }
+    @media (max-width: 520px) {
+      .shell { width: calc(100% - 22px); padding-top: 16px; }
+      .topline { align-items: flex-start; }
+      .intro { font-size: 13px; }
+      .data-grid { grid-template-columns: 1fr 1fr; }
+      .data-card { min-height: 115px; padding: 11px; }
+      .print-button { padding: 8px; font-size: 0; }
+      .print-button span { font-size: 12px; }
+    }
+    @media print {
+      @page { size: landscape; margin: 12mm; }
+      body { background: white; }
+      .shell { width: 100%; padding: 0; }
+      .print-button { display: none; }
+      .board-wrap, .data-card, .flow-card { box-shadow: none; break-inside: avoid; }
+      .svg-scroll { min-width: 0; }
+      .footer { margin-top: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <div class="topline">
+      <div class="brand"><span class="brand-mark">QK</span><span>QR-to-Kitchen System</span></div>
+      <button class="print-button" type="button" onclick="window.print()" aria-label="พิมพ์หรือบันทึกเป็น PDF">
+        <span aria-hidden="true">▤</span><span>พิมพ์ / Save PDF</span>
+      </button>
+    </div>
+
+    <p class="eyebrow">AWS ARCHITECTURE · SERVERLESS</p>
+    <h1>จาก QR ที่โต๊ะ สู่คิวครัวบน AWS</h1>
+    <p class="intro">เว็บเป็น static site; CloudFront ส่งไฟล์จาก S3 ส่วน browser เรียก Lambda Function URL โดยตรงเพื่ออ่านเมนู ส่งออเดอร์ และจัดการร้าน</p>
+    <div class="meta-row" aria-label="สภาพแวดล้อมปัจจุบัน">
+      <span class="meta"><b>REGION</b> us-east-1</span>
+      <span class="meta"><b>WEB</b> S3 + CloudFront</span>
+      <span class="meta"><b>API</b> Lambda Node.js 22</span>
+      <span class="meta"><b>DATA</b> DynamoDB on-demand</span>
+      <span class="meta"><b>DEPLOYED</b> qr-kitchen · qr-kitchen-web</span>
+    </div>
+
+    <section class="board-wrap" aria-labelledby="diagram-title">
+      <div class="board-head">
+        <h2 class="board-title" id="diagram-title">Architecture map · production request paths</h2>
+        <div class="legend" aria-label="คำอธิบายเส้น">
+          <span><i class="swatch green"></i>เว็บไซต์</span>
+          <span><i class="swatch blue"></i>API request/response</span>
+          <span><i class="swatch amber"></i>งาน setup</span>
+        </div>
+      </div>
+      <div class="svg-scroll">
+        <svg viewBox="0 0 1390 670" role="img" aria-labelledby="svg-title svg-desc">
+          <title id="svg-title">แผนภาพ AWS architecture ของ QR-to-Kitchen</title>
+          <desc id="svg-desc">ลูกค้าและพนักงานใช้งานผ่าน browser; CloudFront ส่ง static site จาก S3; API เรียก Lambda Function URL โดยตรง; Lambda อ่านเขียน DynamoDB; seed และสร้าง manager ถูกเรียกจาก AWS CLI</desc>
+          <defs>
+            <marker id="arrow-green" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#176b53"/></marker>
+            <marker id="arrow-blue" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#275c83"/></marker>
+            <marker id="arrow-blue-start" viewBox="0 0 10 10" refX="1.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M10 0 L0 5 L10 10 z" fill="#275c83"/></marker>
+            <marker id="arrow-data" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#54876c"/></marker>
+            <marker id="arrow-data-start" viewBox="0 0 10 10" refX="1.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M10 0 L0 5 L10 10 z" fill="#54876c"/></marker>
+            <marker id="arrow-amber" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#966018"/></marker>
+          </defs>
+
+          <rect class="zone" x="310" y="24" width="1054" height="620" rx="20"/>
+          <text class="zone-label" x="333" y="51">AWS CLOUD · us-east-1</text>
+          <text class="zone-sub" x="333" y="68">CloudFront, S3, Lambda และ DynamoDB อยู่ใน account เดียวกัน</text>
+
+          <!-- Request paths -->
+          <path class="line-web" d="M270 174 H360"/>
+          <text class="flow-label" x="287" y="164">HTTPS · static web</text>
+          <path class="line-web" d="M610 155 H690"/>
+          <text class="flow-label" x="623" y="144">origin ผ่าน OAC</text>
+          <path class="line-web" d="M270 216 C314 230 321 363 360 383"/>
+          <text class="flow-label" x="280" y="294">หน้าเว็บเรียก API โดยตรง</text>
+          <path class="line-api" d="M270 432 C321 425 318 415 360 405"/>
+          <text class="flow-label" x="279" y="449">Bearer JWT · staff</text>
+          <path class="line-api" d="M610 390 H690"/>
+          <text class="flow-label" x="621" y="379">invoke</text>
+          <path class="line-data" d="M960 378 H1030"/>
+          <text class="flow-label" x="973" y="367">read / write</text>
+          <path class="line-ops" d="M960 552 C1004 552 1004 451 1030 432"/>
+          <text class="flow-label" x="963" y="510">seed / create manager</text>
+
+          <!-- Actors -->
+          <g>
+            <rect class="actor" x="30" y="112" width="240" height="142" rx="12"/>
+            <rect class="icon-green" x="48" y="131" width="34" height="34" rx="8"/>
+            <text class="icon-letter" x="65" y="148">QR</text>
+            <text class="node-title" x="94" y="148">ลูกค้าในร้าน</text>
+            <text class="node-desc" x="49" y="188">สแกน QR ที่โต๊ะ → /menu/?table=N</text>
+            <text class="node-desc" x="49" y="207">สั่งแบบ guest ไม่ต้อง login</text>
+            <text class="node-detail" x="49" y="232">ติดตามออเดอร์ด้วย token เฉพาะรายการ</text>
+          </g>
+          <g>
+            <rect class="actor" x="30" y="357" width="240" height="142" rx="12"/>
+            <rect class="icon-blue" x="48" y="376" width="34" height="34" rx="8"/>
+            <text class="icon-letter" x="65" y="393">IAM</text>
+            <text class="node-title" x="94" y="393">ทีมร้าน</text>
+            <text class="node-desc" x="49" y="433">หน้า Kitchen และ Admin</text>
+            <text class="node-desc" x="49" y="452">login ด้วย username/password</text>
+            <text class="node-detail" x="49" y="477">JWT roles: kitchen · manager</text>
+          </g>
+
+          <!-- Delivery -->
+          <g>
+            <rect class="node-green" x="360" y="93" width="250" height="124" rx="12"/>
+            <rect class="icon-green" x="379" y="111" width="34" height="34" rx="8"/>
+            <text class="icon-letter" x="396" y="128">CF</text>
+            <text class="node-title" x="425" y="129">Amazon CloudFront</text>
+            <text class="node-desc" x="380" y="168">HTTPS · cache · directory rewrite</text>
+            <text class="node-detail" x="380" y="190">Function เติม index.html สำหรับ static routes</text>
+          </g>
+          <g>
+            <rect class="node-green" x="690" y="93" width="270" height="124" rx="12"/>
+            <rect class="icon-green" x="709" y="111" width="34" height="34" rx="8"/>
+            <text class="icon-letter" x="726" y="128">S3</text>
+            <text class="node-title" x="755" y="129">Amazon S3</text>
+            <text class="node-desc" x="710" y="168">Next.js static export · HTML / JS / CSS</text>
+            <text class="node-detail" x="710" y="190">Private bucket · CloudFront OAC เท่านั้น</text>
+          </g>
+
+          <!-- API -->
+          <g>
+            <rect class="node-blue" x="360" y="332" width="250" height="116" rx="12"/>
+            <rect class="icon-blue" x="379" y="350" width="34" height="34" rx="8"/>
+            <text class="icon-letter" x="396" y="367">URL</text>
+            <text class="node-title" x="425" y="368">Lambda Function URL</text>
+            <text class="node-desc" x="380" y="405">Public invoke · AuthType NONE</text>
+            <text class="node-detail" x="380" y="426">ไม่มี API Gateway; ตรวจ role ใน API code</text>
+          </g>
+          <g>
+            <rect class="node-blue" x="690" y="290" width="270" height="178" rx="12"/>
+            <rect class="icon-blue" x="709" y="309" width="34" height="34" rx="8"/>
+            <text class="icon-letter" x="726" y="326">λ</text>
+            <text class="node-title" x="755" y="327">API Lambda</text>
+            <text class="node-desc" x="710" y="366">Node.js 22 · 256 MB · timeout 10s</text>
+            <text class="node-desc" x="710" y="386">Auth · menu · orders · tables · health</text>
+            <text class="node-detail" x="710" y="410">JWT_SECRET สำหรับ staff JWT</text>
+            <text class="node-detail" x="710" y="428">Execution role: LabRole</text>
+            <text class="node-detail" x="710" y="450">CORS รองรับ Authorization + tracking token</text>
+          </g>
+          <g>
+            <rect class="node" x="1030" y="280" width="280" height="202" rx="12"/>
+            <rect class="icon-green" x="1049" y="299" width="34" height="34" rx="8"/>
+            <text class="icon-letter" x="1066" y="316">DDB</text>
+            <text class="node-title" x="1095" y="317">Amazon DynamoDB</text>
+            <text class="node-desc" x="1050" y="357">On-demand · serverless storage</text>
+            <line x1="1050" y1="371" x2="1290" y2="371" stroke="#d9e2dc"/>
+            <text class="node-detail" x="1050" y="393">Menu · Orders · Tables</text>
+            <text class="node-detail" x="1050" y="414">Users · Connections</text>
+            <text class="node-detail" x="1050" y="448">tracking token เก็บเป็น SHA-256 hash</text>
+            <text class="small-note" x="1050" y="465">ทุก table มี partition key ตาม resource</text>
+          </g>
+
+          <!-- Ops -->
+          <g>
+            <rect class="node-amber" x="690" y="512" width="270" height="90" rx="12"/>
+            <rect class="icon-amber" x="709" y="530" width="34" height="34" rx="8"/>
+            <text class="icon-letter" x="726" y="547">CLI</text>
+            <text class="node-title" x="755" y="548">Setup helper Lambdas</text>
+            <text class="node-desc" x="710" y="577">SeedFunction · CreateAdminFunction</text>
+            <text class="node-detail" x="710" y="592">invoke ด้วย AWS CLI / Lab credentials</text>
+          </g>
+          <g>
+            <rect class="node-violet" x="1030" y="512" width="280" height="90" rx="12"/>
+            <rect class="icon-violet" x="1049" y="530" width="34" height="34" rx="8"/>
+            <text class="icon-letter" x="1066" y="547">IAM</text>
+            <text class="node-title" x="1095" y="548">AWS Academy LabRole</text>
+            <text class="node-desc" x="1050" y="577">CloudFormation deploy role + Lambda role</text>
+            <text class="node-detail" x="1050" y="592">ไม่มีการสร้าง IAM role ใหม่</text>
+          </g>
+          <path class="line-ops" d="M960 557 H1030"/>
+          <text class="flow-label" x="969" y="545">สิทธิ์เรียก</text>
+        </svg>
+      </div>
+    </section>
+
+    <section aria-labelledby="data-heading">
+      <div class="section-heading">
+        <h2 id="data-heading">ชั้นข้อมูล</h2>
+        <p>ตารางจริงจาก CloudFormation · prefix เริ่มต้น `qrk-`</p>
+      </div>
+      <div class="data-grid">
+        <article class="data-card"><span class="table-icon">M</span><h3>qrk-Menu</h3><p>รายการอาหาร ราคา รูป และสถานะขาย<br><code>PK: id</code></p></article>
+        <article class="data-card"><span class="table-icon">O</span><h3>qrk-Orders</h3><p>รายการสั่ง สถานะ ประวัติ และ tracking hash<br><code>PK: id</code></p></article>
+        <article class="data-card"><span class="table-icon">T</span><h3>qrk-Tables</h3><p>ชื่อโต๊ะ จำนวนที่นั่ง สถานะเปิดใช้งาน<br><code>PK: id</code></p></article>
+        <article class="data-card"><span class="table-icon">U</span><h3>qrk-Users</h3><p>บัญชีทีมงานและ password hash<br><code>PK: username</code></p></article>
+        <article class="data-card unused"><span class="table-icon">C</span><h3>qrk-Connections</h3><p>เตรียมไว้สำหรับ push/realtime<br><strong>ปัจจุบันยังไม่ถูกใช้</strong></p></article>
+      </div>
+    </section>
+
+    <section aria-labelledby="flows-heading">
+      <div class="section-heading">
+        <h2 id="flows-heading">เส้นทางการทำงาน</h2>
+        <p>API เป็น Lambda Function URL แยกจากเส้นทาง static website</p>
+      </div>
+      <div class="flows">
+        <article class="flow-card">
+          <span class="flow-number">01 / GUEST ORDER</span>
+          <h3>ลูกค้าสแกน QR</h3>
+          <p><strong>QR → CloudFront/S3 → Browser → Function URL → API Lambda → DynamoDB</strong><br>ส่งเลขโต๊ะกับ menu item IDs; API ตรวจโต๊ะ/เมนูและคำนวณราคา แล้วคืน order ID กับ token สำหรับติดตาม</p>
+        </article>
+        <article class="flow-card staff">
+          <span class="flow-number">02 / STAFF OPERATIONS</span>
+          <h3>ครัวและผู้จัดการ</h3>
+          <p><strong>Browser → /auth/login → JWT → API Lambda</strong><br>Kitchen poll ออเดอร์และอัปเดตสถานะ; Manager ดูแลเมนู โต๊ะ และ QR โดยใช้ role checks ใน API</p>
+        </article>
+        <article class="flow-card ops">
+          <span class="flow-number">03 / BOOTSTRAP</span>
+          <h3>เริ่มต้นข้อมูล AWS</h3>
+          <p><strong>AWS CLI (voclabs) → Seed/CreateAdmin Lambda → DynamoDB</strong><br>ใช้ LabRole เขียนข้อมูลแทนเครื่อง local; helper ไม่มี public URL และไม่อยู่ใน user request path</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="notes" aria-label="ข้อควรทราบเกี่ยวกับ architecture">
+      <article class="note"><h3>การยืนยันตัวตน</h3><p>Function URL เปิดรับ request ได้ที่ระดับ AWS (`AuthType: NONE`) แต่ API ตรวจ JWT/role สำหรับ staff endpoints; ลูกค้าสั่งจาก QR แบบ guest และติดตามออเดอร์ด้วย token เฉพาะรายการ ไม่ได้ใช้ Cognito</p></article>
+      <article class="note"><h3>การอัปเดตหน้าครัว</h3><p>ใช้ polling จาก browser ไป `GET /orders` ประมาณทุก 3 วินาที ไม่ได้ใช้ WebSocket; `Connections` table จึงเป็น resource ที่เตรียมไว้เท่านั้น</p></article>
+      <article class="note warn"><h3>ข้อจำกัด Learner Lab</h3><p>ใช้ `us-east-1` และ role `LabRole`; credentials ฝั่ง AWS CLI หมดอายุตาม Lab session ส่วน resource/data อาจอยู่ต่อหรือถูก reset ตามสถานะ Lab</p></article>
+    </section>
+
+    <footer class="footer">
+      <span>QR-to-Kitchen · AWS serverless architecture overview</span>
+      <span>Website: <a href="https://d2u7hpwgj38buu.cloudfront.net" target="_blank" rel="noreferrer">d2u7hpwgj38buu.cloudfront.net</a></span>
+      <span>API: Lambda Function URL · Region: us-east-1</span>
+    </footer>
+  </main>
+</body>
+</html>

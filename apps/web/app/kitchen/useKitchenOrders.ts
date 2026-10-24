@@ -14,9 +14,12 @@ const toMenuMap = (items: MenuItem[]): MenuMap => Object.fromEntries(items.map((
 export function useNow(intervalMs = 15000): number | null {
   const [now, setNow] = useState<number | null>(null);
   useEffect(() => {
-    setNow(Date.now());
+    const initialTimer = window.setTimeout(() => setNow(Date.now()), 0);
     const t = setInterval(() => setNow(Date.now()), intervalMs);
-    return () => clearInterval(t);
+    return () => {
+      window.clearTimeout(initialTimer);
+      clearInterval(t);
+    };
   }, [intervalMs]);
   return now;
 }
@@ -31,7 +34,9 @@ export function useKitchenOrders() {
   const [actionError, setActionError] = useState<string | null>(null);
 
   const ordersRef = useRef<KitchenOrder[]>([]);
-  ordersRef.current = orders;
+  useEffect(() => {
+    ordersRef.current = orders;
+  }, [orders]);
   /** ออเดอร์ที่กำลังรอ PATCH — กัน polling เขียนทับสถานะที่เพิ่งกด */
   const inflight = useRef(new Map<string, KitchenStatus>());
   const menuLoaded = useRef(false);
@@ -39,12 +44,17 @@ export function useKitchenOrders() {
   /* ---------- Polling ---------- */
   useEffect(() => {
     if (USE_MOCK) {
-      setMenu(toMenuMap(MOCK_MENU));
-      setOrders(createMockOrders());
-      setUpdatedAt(Date.now());
-      setLoading(false);
+      const initialTimer = window.setTimeout(() => {
+        setMenu(toMenuMap(MOCK_MENU));
+        setOrders(createMockOrders());
+        setUpdatedAt(Date.now());
+        setLoading(false);
+      }, 0);
       const t = setInterval(() => setUpdatedAt(Date.now()), POLL_MS);
-      return () => clearInterval(t);
+      return () => {
+        window.clearTimeout(initialTimer);
+        clearInterval(t);
+      };
     }
 
     let stop = false;

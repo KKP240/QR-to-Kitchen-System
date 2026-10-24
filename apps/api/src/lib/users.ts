@@ -1,4 +1,5 @@
-import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { ConditionalCheckFailedException } from "@aws-sdk/client-dynamodb";
+import { DeleteCommand, GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import { db } from "./dynamo";
 import { TABLES } from "./config";
 import { hashPassword } from "./auth";
@@ -21,4 +22,18 @@ export async function createUser(username: string, password: string, role: UserR
   await db.send(
     new PutCommand({ TableName: TABLES.users, Item: { username, passwordHash, role } })
   );
+}
+
+export async function deleteUser(username: string): Promise<boolean> {
+  try {
+    await db.send(new DeleteCommand({
+      TableName: TABLES.users,
+      Key: { username },
+      ConditionExpression: "attribute_exists(username)",
+    }));
+    return true;
+  } catch (error) {
+    if (error instanceof ConditionalCheckFailedException) return false;
+    throw error;
+  }
 }

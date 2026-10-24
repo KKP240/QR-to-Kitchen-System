@@ -57,16 +57,19 @@ function AdminConsole() {
   const [printing, setPrinting] = useState<string[] | null>(null);
 
   useEffect(() => {
-    setOrigin(window.location.origin);
-    setDate(
-      new Intl.DateTimeFormat("th-TH", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-        timeZone: "Asia/Bangkok",
-      }).format(new Date()),
-    );
     let active = true;
+    const browserMetadataTimer = window.setTimeout(() => {
+      if (!active) return;
+      setOrigin(window.location.origin);
+      setDate(
+        new Intl.DateTimeFormat("th-TH", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+          timeZone: "Asia/Bangkok",
+        }).format(new Date()),
+      );
+    }, 0);
     Promise.all([
       api<{ items: MenuItem[] }>("/menu"),
       api<{ tables: RestaurantTable[] }>("/tables"),
@@ -85,6 +88,7 @@ function AdminConsole() {
 
     return () => {
       active = false;
+      window.clearTimeout(browserMetadataTimer);
     };
   }, []);
 

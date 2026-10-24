@@ -66,7 +66,7 @@ Lambda Function URL ──► Lambda "ApiFunction" (router ตัวเดีย
 | Frontend | Next.js (App Router) + React + TypeScript | **Static export** เท่านั้น (ดูข้อ 9) |
 | Hosting | S3 (private) + CloudFront (HTTPS) | สร้างผ่าน `infra/web-hosting.yaml` |
 | Backend | AWS Lambda (Node.js 22) ตัวเดียว + router ในโค้ด | เข้าถึงผ่าน **Lambda Function URL** |
-| Database | DynamoDB (on-demand) | 4 ตาราง |
+| Database | DynamoDB (on-demand) | 5 ตาราง |
 | Real Time | **Polling** (จอครัวเรียก `GET /orders` ทุก 2-3 วินาที) | ตัวเลือกอนาคต: AWS IoT Core |
 | IaC | AWS SAM / CloudFormation | โฟลเดอร์ `infra/` |
 | Dev (เครื่อง) | Docker (DynamoDB Local) | ใช้เฉพาะตอนพัฒนา ไม่ได้ใช้รันจริง |
@@ -83,21 +83,22 @@ Lambda Function URL ──► Lambda "ApiFunction" (router ตัวเดีย
 | ส่วน | สถานะ |
 |---|---|
 | Monorepo (pnpm workspace), shared types | ✅ เสร็จ |
-| Next.js static export + หน้า `/`, `/menu`, `/kitchen`, `/admin` | ✅ โครงเสร็จ (หน้า `/menu` ดึงเมนูจริงจาก API แล้ว ส่วน `/kitchen` และ `/admin` ยังเป็นหน้าเปล่า) |
-| API router + `GET /health`, `GET /menu` | ✅ ใช้งานได้ |
+| Next.js static export + หน้า `/`, `/login`, `/menu`, `/kitchen`, `/admin` | ✅ ใช้งานได้; ลูกค้าเปิด `/menu/?table=N` จาก QR โดยไม่ login |
+| API router + `GET /health`, `GET /menu` | ✅ ต่อ DynamoDB จริง |
 | API Auth + staff roles (`kitchen`, `manager`) | ✅ JWT login และจำกัดสิทธิ์ตาม endpoint |
-| API: `POST/GET /orders`, `PATCH /orders/:id/status` | ✅ ลูกค้าสั่งแบบ guest ผ่าน QR; ครัว/ผู้จัดการ login |
-| API: `POST/PUT/DELETE /menu` | ✅ ผู้จัดการเท่านั้น |
-| API: `/tables` | 🔲 ตรวจ role ผู้จัดการแล้ว แต่การจัดการข้อมูลยังตอบ `501` |
-| DynamoDB 4 ตาราง (deploy บน AWS) | ✅ เสร็จ |
+| API: `POST/GET /orders`, `GET /orders/:id`, `PATCH /orders/:id/status` | ✅ guest ordering/tracking และ staff kitchen workflow |
+| API: `POST/PUT/DELETE /menu` | ✅ ผู้จัดการเท่านั้น พร้อม validation |
+| API: `GET/POST/PUT/DELETE /tables` | ✅ ผู้จัดการเท่านั้น พร้อม validation |
+| DynamoDB 5 ตาราง (deploy บน AWS) | ✅ Menu, Orders, Tables, Users, Connections |
+| Bootstrap seed | ✅ เติม 6 เมนูและ 8 โต๊ะแบบ idempotent ไม่เขียนทับข้อมูลเดิม |
 | Local dev: Docker DynamoDB Local + local API server | ✅ เสร็จ |
 | Hosting S3 + CloudFront + สคริปต์ `web:deploy` | ✅ เสร็จ (ทดสอบเปิดจากมือถือแล้ว) |
 | สคริปต์ตั้ง credentials / deploy อัตโนมัติ (ไม่ต้องแก้ Account ID) | ✅ เสร็จ |
-| Auth เจ้าของร้าน (Cognito) | ⏸ ข้ามไว้ก่อน: มีไฟล์ `infra/auth.yaml` แต่ deploy ยังไม่สำเร็จ ยังไม่ได้ตรวจสาเหตุ |
-| ระบบออเดอร์ + จอครัว | 🔲 ยังไม่ทำ |
-| QR Code generator ในหลังบ้าน | 🔲 ยังไม่ทำ |
+| Staff authentication | ✅ JWT ใน API; password hash/role เก็บใน `qrk-Users` (ไม่ใช้ Cognito) |
+| ระบบออเดอร์ + จอครัว | ✅ guest ordering, order tracking token, kitchen polling และ status updates |
+| หลังบ้าน/QR Code | ✅ manager CRUD เมนูและโต๊ะ พร้อม QR URL |
 
-> API ยังเป็นงานพัฒนา: การจัดการโต๊ะยังไม่ implement และไม่มีการสมัครสมาชิกผ่าน HTTP; สร้างบัญชีผ่านคำสั่ง local ด้านล่าง
+> ลูกค้าไม่ต้อง login; staff ใช้ JWT. ไม่มี public sign-up endpoint. บน AWS สร้าง staff account ผ่าน `CreateAdminFunction` ตามข้อ 8.3
 
 ---
 
@@ -137,7 +138,7 @@ QR-to-Kitchen-System/
 ├── infra/                        # โครงสร้าง AWS (ผู้ดูแลโครงสร้างเท่านั้นที่แก้)
 │   ├── template.yaml             # API Lambda + Function URL + DynamoDB (SAM)
 │   ├── web-hosting.yaml          # S3 + CloudFront
-│   ├── auth.yaml                 # Cognito (ยังไม่เสร็จ)
+│   ├── auth.yaml                 # legacy/ไม่ใช้ใน deployment ปัจจุบัน
 │   └── samconfig.toml            # ค่า deploy ของ SAM
 ├── scripts/
 │   ├── set-aws-credentials.ps1   # วาง credentials จาก clipboard ลงเครื่อง
@@ -214,8 +215,8 @@ pnpm --filter @qr-kitchen/api run db:create
 pnpm --filter @qr-kitchen/api run db:seed
 ```
 
-- `db:create` สร้างตาราง 4 ตาราง
-- `db:seed` ใส่เมนูตัวอย่าง 3 รายการ
+- `db:create` สร้างตาราง 5 ตาราง
+- `db:seed` เติมเมนูตัวอย่างและโต๊ะ 1–8; รันซ้ำได้โดยไม่เขียนทับข้อมูลที่แก้แล้ว
 - ดูข้อมูลในตารางได้ที่ http://localhost:8001 (dynamodb-admin)
 - ข้อมูลเป็นแบบ **in-memory** ถ้า `docker compose down` หรือปิด Docker ข้อมูลจะหาย ต้องรัน `db:create` และ `db:seed` ใหม่ (ตั้งใจไว้)
 - ถ้า `db:create` ขึ้น `socket hang up` แปลว่า DynamoDB ยังบูตไม่เสร็จ รอ 5-10 วินาทีแล้วรันใหม่
@@ -228,7 +229,7 @@ pnpm --filter @qr-kitchen/api run dev
 
 ทดสอบ:
 - http://localhost:4000/health → `{"status":"ok", ...}`
-- http://localhost:4000/menu → เมนู 3 รายการ
+- http://localhost:4000/menu → เมนูตัวอย่างจาก DynamoDB
 - http://localhost:4000/orders → `401 Unauthorized` หากไม่ส่ง Bearer token
 
 ### 7.3 ทดสอบ Auth, role และ API ด้วย Postman
@@ -250,17 +251,7 @@ pnpm --filter @qr-kitchen/api run admin:create manager01 password123 manager
 
 ทำซ้ำด้วย `kitchen01` เพื่อทดสอบ role ครัว จาก response เก็บค่า `token` แล้วเปิด **Authorization → Bearer Token** ใน request ของทีมงาน (หรือใส่ header `Authorization: Bearer <token>`). ตรวจ token ด้วย `GET http://localhost:4000/auth/me`
 
-เตรียมข้อมูลสำหรับทดสอบ โดยใช้ token ผู้จัดการสร้างโต๊ะชื่อ `5` หากยังไม่มี:
-
-```http
-POST http://localhost:4000/tables
-Authorization: Bearer <manager-token>
-Content-Type: application/json
-
-{"name":"5","seats":4}
-```
-
-จากนั้นสั่งเมนู `m1` ที่มีใน seed โดยไม่ต้องใส่ token ลูกค้า:
+หลัง `db:seed` มีโต๊ะชื่อ `5` และเมนู `m1` ให้ทดสอบแล้ว ลูกค้าสั่งอาหารโดยไม่ต้องใส่ token; ถ้าต้องทดสอบ CRUD โต๊ะ ให้ใช้ token ผู้จัดการ:
 
 | Request | Token | ผลที่คาดหวัง |
 |---|---|---|
@@ -351,7 +342,7 @@ pnpm run deploy
 
 > ต้องใช้ `pnpm run deploy` (ไม่ใช่ `pnpm deploy`) เพราะ `pnpm deploy` เป็นคำสั่งในตัวของ pnpm
 
-สิ่งที่เกิดขึ้น: สร้าง stack ชื่อ `qr-kitchen` ประกอบด้วย Lambda API, Function URL, DynamoDB 4 ตาราง, SeedFunction ครั้งแรกใช้เวลา 2-5 นาที
+สิ่งที่เกิดขึ้น: สร้าง/อัปเดต stack `qr-kitchen` ซึ่งมี API Lambda, Function URL, SeedFunction, CreateAdminFunction และ DynamoDB 5 ตาราง การ deploy ซ้ำไม่ลบข้อมูลในตาราง
 
 ดู URL ของ API:
 
@@ -361,18 +352,53 @@ aws cloudformation describe-stacks --stack-name qr-kitchen --query "Stacks[0].Ou
 
 - ถ้าขึ้น `No changes to deploy` ถือว่าปกติ (ของบน AWS ตรงกับโค้ดแล้ว)
 
-### 8.3 ใส่เมนูตัวอย่างลง DynamoDB บน AWS
+### 8.3 Seed ข้อมูลและสร้าง staff account บน AWS
 
-เครื่องของเรา (`voclabs`) เขียน DynamoDB ตรง ๆ ไม่ได้ ต้องให้ Lambda (`LabRole`) เขียนให้:
+เครื่องของเรา (`voclabs`) เขียน DynamoDB บน AWS โดยตรงไม่ได้ ให้ Lambda ที่ใช้ `LabRole` ทำแทน Seed เติมเมนูตัวอย่างและโต๊ะ 1–8 โดยเพิ่มเฉพาะรายการที่ยังไม่มี รันซ้ำได้และไม่เขียนทับข้อมูลเดิม:
 
 ```bat
-aws lambda list-functions --query "Functions[].FunctionName" --output text --region us-east-1
-aws lambda invoke --function-name <ชื่อที่ขึ้นต้นด้วย qr-kitchen-SeedFunction-> --region us-east-1 seed-out.json
-type seed-out.json
+aws lambda list-functions --query "Functions[?contains(FunctionName, 'SeedFunction') || contains(FunctionName, 'CreateAdminFunction')].FunctionName" --output table --region us-east-1
+aws lambda invoke --function-name <SeedFunction-name> --region us-east-1 --cli-binary-format raw-in-base64-out --payload "{}" seed-result.json
+type seed-result.json
 ```
 
-ต้องเห็น `"seeded":3` แล้วเปิด `<ApiUrl>menu` จะได้เมนู 3 รายการ
-(ลบไฟล์ `seed-out.json` ทิ้งหลังใช้ อย่า commit)
+ผลลัพธ์รายงาน `menu.inserted`, `menu.existing`, `menu.skippedDuplicateName`, `tables.inserted` และ `tables.existing`; ค่า inserted เปลี่ยนตามข้อมูลที่มีอยู่แล้วและ seed ไม่เขียนทับข้อมูลเดิม ตรวจเมนู/โต๊ะได้จาก Postman ด้วย `<ApiUrl>/menu` และ `GET <ApiUrl>/tables` (ต้องใช้ manager token)
+
+สร้าง manager และ kitchen account ผ่าน `CreateAdminFunction` ซึ่งไม่มี public URL ใช้ AWS CLI จากเครื่องที่มี Lab credentials สร้างไฟล์ `manager-event.json` ชั่วคราว:
+
+```json
+{"username":"manager01","password":"ใส่รหัสผ่านอย่างน้อย 8 ตัว","role":"manager"}
+```
+
+จากนั้นเรียก Lambda:
+
+```bat
+aws lambda invoke --function-name <CreateAdminFunction-name> --region us-east-1 --cli-binary-format raw-in-base64-out --payload fileb://manager-event.json manager-result.json
+type manager-result.json
+```
+
+เปลี่ยน role เป็น `kitchen` และ username/password สำหรับบัญชีครัว แล้วเรียกซ้ำโดยใช้ชื่อไฟล์ event/result คนละชื่อ ถ้าไม่ส่ง role helper จะสร้าง manager; รองรับเฉพาะ `manager` และ `kitchen` (ลูกค้าไม่ต้องมีบัญชี)
+
+ลบบัญชี staff ที่ไม่ใช้แล้วได้โดยสร้าง `delete-event.json`:
+
+```json
+{"username":"manager01","action":"delete"}
+```
+
+แล้วเรียก helper เดิม:
+
+```bat
+aws lambda invoke --function-name <CreateAdminFunction-name> --region us-east-1 --cli-binary-format raw-in-base64-out --payload fileb://delete-event.json delete-result.json
+type delete-result.json
+```
+
+การลบนี้กระทบเฉพาะบัญชีใน `qrk-Users` ไม่ลบ order history
+
+ไฟล์ event มี password ห้าม commit และลบหลังใช้:
+
+```bat
+del manager-event.json manager-result.json kitchen-event.json kitchen-result.json
+```
 
 ### 8.4 Deploy หน้าเว็บ (S3 + CloudFront)
 
@@ -387,20 +413,38 @@ pnpm run web:deploy
 
 เปิด `https://xxxx.cloudfront.net/menu/?table=5` ทดสอบ (ใช้เปิดจากมือถือได้)
 
-### 8.5 ลำดับสรุป (บัญชีใหม่ / Lab ถูกรีเซ็ต)
+### 8.5 Smoke test ระบบ AWS ด้วย Postman
+
+ตั้งตัวแปร `baseUrl` เป็นค่า `ApiUrl` ที่ได้จากข้อ 8.2 และทดสอบตามลำดับ:
+
+1. `GET {{baseUrl}}/health` ต้องได้ `200` และ `status: "ok"`
+2. `GET {{baseUrl}}/menu` ต้องได้รายการเมนูจาก DynamoDB
+3. `POST {{baseUrl}}/auth/login` ด้วย manager account; เก็บ `token` แล้วตั้ง Authorization → Bearer Token สำหรับ request ของ staff
+4. `GET {{baseUrl}}/tables` ด้วย manager token ต้องเห็นโต๊ะ 1–8 หลัง seed
+5. `GET {{baseUrl}}/orders` โดยไม่ใส่ token ต้องได้ `401`; ด้วย kitchen หรือ manager token ต้องได้ `200`
+6. `POST {{baseUrl}}/orders` โดยไม่ใส่ Authorization ด้วย body `{"tableId":"5","items":[{"menuItemId":"m1","quantity":1}]}` ต้องได้ `201` พร้อม `id` และ `trackingToken`
+7. `GET {{baseUrl}}/orders/<id>` ใส่ header `X-Order-Tracking-Token: <trackingToken>` ต้องได้ `200`; ลอง token ผิดต้องไม่ได้ข้อมูลออเดอร์
+8. ใช้ kitchen/manager token `PATCH {{baseUrl}}/orders/<id>/status` ตามลำดับ `cooking` → `ready` → `served`; ข้ามสถานะต้องได้ `409`
+9. ทดสอบ CRUD manager โดยสร้างเมนู/โต๊ะชั่วคราว, ตรวจด้วย GET, แล้ว DELETE รายการทดสอบหลังเสร็จ
+
+ออเดอร์ทดสอบจะถูกเก็บเป็น order history และไม่มี DELETE endpoint; ใช้ note เช่น `AWS smoke test` แล้วเลื่อนสถานะเป็น `served` เพื่อไม่ให้ค้างในคิว
+
+ที่ CloudFront ให้ทดสอบ `https://<SiteUrl>/menu/?table=5` ในหน้าต่าง private/incognito: ลูกค้าต้องเห็น “โต๊ะ 5” และเมนูโดยไม่ login; staff login ที่ `/login/` แล้วทดสอบ `/kitchen/` หรือ `/admin/`
+
+### 8.6 ลำดับสรุป (บัญชีใหม่ / Lab ถูกรีเซ็ต)
 
 ```
-Start Lab → pnpm aws:creds → pnpm run deploy → invoke SeedFunction → pnpm run web:deploy
+Start Lab → pnpm aws:creds → pnpm run deploy → invoke SeedFunction → invoke CreateAdminFunction → pnpm run web:deploy → Smoke test
 ```
 
-### 8.6 deploy ซ้ำเมื่อแก้โค้ด
+### 8.7 deploy ซ้ำเมื่อแก้โค้ด
 
 | แก้อะไร | รันอะไร |
 |---|---|
 | โค้ดใน `apps/api` หรือ `infra/template.yaml` | `pnpm run deploy` |
 | โค้ดใน `apps/web` | `pnpm run web:deploy` |
 
-### 8.7 สำหรับ macOS/Linux (คำสั่ง manual แทนสคริปต์)
+### 8.8 สำหรับ macOS/Linux (คำสั่ง manual แทนสคริปต์)
 
 ```bash
 # 1) วาง credentials ที่ ~/.aws/credentials และ ~/.aws/config (region = us-east-1) ด้วยตัวเอง
@@ -487,23 +531,23 @@ useEffect(() => {
 }, []);
 ```
 
-### 9.5 Contract ของ API (ระหว่างที่ Backend ยังไม่เสร็จ)
+### 9.5 Contract ของ API ปัจจุบัน
 
-Frontend เขียนตามนี้ได้เลย และทดสอบด้วยข้อมูลจำลองก่อน Backend ที่รับผิดชอบ orders ต้องทำให้ตรงกัน ถ้าจะเปลี่ยน contract **ต้องแก้ `packages/shared/src/index.ts` และแจ้งทีม**
+ทุก request เข้าถึง Lambda Function URL โดยตรง; staff endpoints ใช้ Bearer JWT, guest order ไม่ต้อง login ถ้าจะเปลี่ยน contract **ต้องแก้ `packages/shared/src/index.ts` และแจ้งทีม**
 
 | Method | Path | Body / Query | Response | สถานะ |
 |---|---|---|---|---|
 | GET | `/health` | - | `{status:"ok", ...}` | ✅ |
 | GET | `/menu` | - | `{items: MenuItem[]}` | ✅ |
-| POST | `/menu` | MenuItem | MenuItem | 🔲 ต้อง auth |
-| PUT | `/menu/:id` | MenuItem | MenuItem | 🔲 ต้อง auth |
-| DELETE | `/menu/:id` | - | `{deleted:true}` | 🔲 ต้อง auth |
-| POST | `/orders` | `{tableId, items:[{menuItemId, quantity}]}` | `Order` (201) | 🔲 |
-| GET | `/orders` | `?status=pending,cooking` | `{orders: Order[]}` | 🔲 |
-| PATCH | `/orders/:id/status` | `{status: OrderStatus}` | `Order` | 🔲 |
-| GET/POST/DELETE | `/tables`, `/tables/:id` | - | - | 🔲 ต้อง auth |
-
-> ตอนนี้ endpoint ที่ 🔲 ตอบ `501` อย่าตกใจเมื่อเจอ
+| POST | `/menu` | `{name, price, ...}` | `MenuItem` (201) | ✅ manager |
+| PUT | `/menu/:id` | fields to update | `MenuItem` | ✅ manager |
+| DELETE | `/menu/:id` | - | `{deleted:true, id}` | ✅ manager |
+| POST | `/orders` | `{tableId, items:[{menuItemId, quantity}], note?}` | `Order + trackingToken` (201) | ✅ guest |
+| GET | `/orders` | `?status=pending,cooking` | `{orders: Order[]}` | ✅ kitchen/manager |
+| GET | `/orders/:id` | `X-Order-Tracking-Token` for guest | `Order` | ✅ tracking token or staff JWT |
+| PATCH | `/orders/:id/status` | `{status: OrderStatus}` | `Order` | ✅ kitchen/manager, sequential transitions |
+| GET | `/tables` | - | `{tables: RestaurantTable[]}` | ✅ manager |
+| POST/PUT/DELETE | `/tables`, `/tables/:id` | table fields | table / deleted result | ✅ manager |
 
 ### 9.6 วิธีทดสอบฝั่ง Frontend
 
@@ -551,9 +595,10 @@ Frontend เขียนตามนี้ได้เลย และทดส�
 | `qrk-Menu` | `id` (string) | MenuItem: name, price, imageUrl?, available |
 | `qrk-Orders` | `id` (string) | Order: tableId, items[], status, createdAt |
 | `qrk-Tables` | `id` (string) | โต๊ะ |
+| `qrk-Users` | `username` (string) | บัญชี staff: passwordHash, role |
 | `qrk-Connections` | `connectionId` | เตรียมไว้สำหรับ Real Time แบบ push ในอนาคต (ยังไม่ใช้) |
 
-ตอนนี้ทุกตารางมีแค่ partition key `id` → การ `Scan` ไม่รับประกันลำดับ และคิวรี `status` ต้องใช้ filter ถ้าต้องการ index (GSI) ให้แก้ `infra/template.yaml` **และ** `apps/api/src/local/create-tables.ts` ให้ตรงกัน แล้วแจ้งผู้ดูแลโครงสร้าง
+ทุกตารางใช้ partition key เดียว แต่ชื่อ key ต่างกันตาม resource (`id`, `username` หรือ `connectionId`) → `Scan` ไม่รับประกันลำดับ และ filter สถานะ order ยังเป็น Scan; ถ้าปริมาณข้อมูลโตให้พิจารณา GSI/Query พร้อมแก้ `infra/template.yaml` **และ** `apps/api/src/local/create-tables.ts` ให้ตรงกัน
 
 ### 10.3 ข้อควรรู้เฉพาะ Learner Lab
 
@@ -586,7 +631,7 @@ Frontend เขียนตามนี้ได้เลย และทดส�
 | **DynamoDB สร้างตาราง** | `voclabs` สร้างเองไม่ได้ แต่ CloudFormation ผ่าน `LabRole` ได้ | ต้อง deploy ด้วย `--role-arn` (สคริปต์ทำให้แล้ว) |
 | **DynamoDB เขียนข้อมูลจากเครื่อง** | ❌ (`voclabs`) | ใช้ Lambda เขียนแทน (SeedFunction) |
 | **S3 + CloudFront ผ่าน CloudFormation** | ✅ ใช้ได้ | ใช้งานอยู่ |
-| **Cognito** | เรียกได้ แต่สร้างผ่าน CloudFormation ยังไม่สำเร็จ | อยู่ระหว่างตรวจสอบ (ดูข้อ 16) |
+| **Cognito** | ไม่ใช้ในระบบปัจจุบัน | staff auth ใช้ password hash + JWT ใน Lambda/DynamoDB; ลูกค้าสั่งแบบ guest |
 | **AWS IoT Core** | เรียกได้ | ตัวเลือกสำหรับ Real Time ในอนาคต (ยังไม่ทดสอบ) |
 | **Region** | ใช้ `us-east-1` เท่านั้น | ฝังไว้ในสคริปต์ |
 | **ข้อมูล/resource หลัง Lab ปิด** | มักยังอยู่ แต่ถ้า Lab ถูกรีเซ็ตอาจหาย | รัน deploy ใหม่ + seed ใหม่ได้เสมอ |
@@ -720,7 +765,12 @@ git merge main
 |---|---|
 | หน้าเมนูขึ้น `ยังไม่ได้ตั้งค่า` / `NEXT_PUBLIC_API_URL is not set` | สร้าง `apps/web/.env.local` แล้วรีสตาร์ท `pnpm dev` |
 | `โหลดเมนูไม่สำเร็จ: Failed to fetch` | API ไม่ได้รัน (`pnpm ... api run dev`) หรือ URL ผิด → ดู F12 → Console/Network |
-| `HTTP 501` | endpoint นั้นยังไม่ถูกพัฒนา (ถูกต้องแล้ว) |
+| `400` จาก `POST /orders` | ตรวจว่ามีโต๊ะ active และ menu item เปิดขาย; bootstrap ข้อมูลด้วย SeedFunction |
+| `401` จาก `/auth/login` | ตรวจ username/password และ role ต้องเป็น `manager` หรือ `kitchen` |
+| `401` จาก `GET /orders` | endpoint นี้ต้องมี Bearer JWT ของ staff |
+| `403` จาก menu/table CRUD | ใช้ manager token; kitchen ไม่มีสิทธิ์จัดการข้อมูลร้าน |
+| `404` จาก `PUT/DELETE /menu` หรือ `/tables` | ตรวจ resource id ว่ามีอยู่จริง |
+| `409` จากการเปลี่ยนสถานะออเดอร์ | เปลี่ยนตามลำดับ `pending → cooking → ready → served` |
 | `next build` ฟ้อง error เรื่อง export / dynamic | ละเมิดกฎ static export (ดูข้อ 9.3) |
 | เข้า `/menu` ไม่ได้แต่ `/menu/` ได้ | ใส่ `/` ท้ายลิงก์ (`trailingSlash: true`) |
 | หน้าบน CloudFront ยังเป็นของเก่า | cache → `pnpm run web:deploy` ใหม่ (ล้าง cache ให้อัตโนมัติ) หรือ hard refresh (Ctrl+Shift+R) |
@@ -782,21 +832,17 @@ aws cloudformation delete-stack --stack-name qr-kitchen-auth --region us-east-1
 ## 16. Roadmap
 
 **ทำแล้ว**
-- [x] Repo + monorepo + shared types
-- [x] Next.js static export (3 หน้าหลัก) + หน้าเมนูดึงข้อมูลจริง
-- [x] API Lambda ตัวเดียว + router + local dev server + Docker DynamoDB Local
-- [x] IaC (SAM) + DynamoDB + Function URL บน Learner Lab
-- [x] Hosting S3 + CloudFront (HTTPS) + สคริปต์ deploy
-- [x] สคริปต์ credentials / deploy ที่ใช้ได้กับทุกบัญชี
+- [x] Static web hosting ผ่าน S3 private bucket + CloudFront/OAC
+- [x] API Lambda + Function URL + DynamoDB 5 ตารางบน Learner Lab
+- [x] Idempotent seed สำหรับเมนูและโต๊ะ; staff bootstrap ผ่าน Lambda helper
+- [x] Staff JWT auth และ role guards; ลูกค้าสั่ง guest ผ่าน QR
+- [x] CRUD เมนู/โต๊ะ, order creation/tracking, kitchen polling/status transitions
+- [x] Local Docker DynamoDB + API server และ AWS deploy scripts
 
 **ต่อไป**
-- [ ] **Auth เจ้าของร้าน:** ตรวจสาเหตุที่ Cognito ใน `infra/auth.yaml` deploy ไม่ผ่านด้วย `describe-stack-events` ถ้า LabRole สร้างไม่ได้ ให้ทำ login เองใน Lambda (เก็บรหัสผ่านแบบ hash ใน DynamoDB + ออก JWT) พร้อม middleware ป้องกัน `POST/PUT/DELETE /menu` และ `/tables`
-- [ ] ระบบออเดอร์: `POST /orders`, `GET /orders`, `PATCH /orders/:id/status`
-- [ ] จอครัว (polling) + เปลี่ยนสถานะ
-- [ ] หลังบ้าน: จัดการเมนู/โต๊ะ + สร้าง QR Code
-- [ ] ตะกร้าและติดตามสถานะออเดอร์ฝั่งลูกค้า
-- [ ] (ตัวเลือก) เปลี่ยน Polling เป็น Real Time จริงด้วย AWS IoT Core
-- [ ] ลบ `SeedFunction` ก่อนส่งงาน
+- [ ] เพิ่ม automated integration tests สำหรับ DynamoDB Local และ API routes
+- [ ] เพิ่ม DynamoDB GSI/Query ตามปริมาณข้อมูลจริง เพื่อลด Scan ใน order/table listing
+- [ ] พิจารณา image upload/storage และ realtime push หากจำเป็น
 - [ ] ตั้ง Branch protection และ CODEOWNERS
 
 ---

@@ -1,4 +1,4 @@
-import type { MenuItem } from "@qr-kitchen/shared";
+import type { MenuItem, RestaurantTable } from "@qr-kitchen/shared";
 
 const photo = (id: string) =>
   `https://images.unsplash.com/${id}?auto=format&fit=crop&w=900&q=80`;
@@ -55,11 +55,18 @@ export const seedMenuItems: MenuItem[] = [
   },
   {
     id: "m6",
-    name: "ผัดไทยกุ้งสด",
-    description: "เส้นจันท์ผัดซอสกลมกล่อม กุ้งสดตัวโต ถั่วงอกสด",
+    name: "ผัดไทยไก่",
+    description: "เส้นจันท์ผัดซอสกลมกล่อม ไก่นุ่ม ถั่วงอกสด",
     category: "จานเดียว",
     price: 89,
     available: true,
     imageUrl: photo("photo-1559314809-0d155014e29e"),
   },
 ];
+
+export const seedTables: RestaurantTable[] = Array.from({ length: 8 }, (_, index) => ({
+  id: `table-${index + 1}`,
+  name: String(index + 1),
+  seats: index === 1 || index === 6 ? 2 : 4,
+  active: true,
+}));

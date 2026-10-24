@@ -1,15 +1,10 @@
 import "./env";
-import { PutCommand } from "@aws-sdk/lib-dynamodb";
-import { seedMenuItems as items } from "../lib/seed-data";
-import { db } from "../lib/dynamo";
-import { TABLES } from "../lib/config";
+import { seedInitialData } from "../lib/seed";
 
 
 async function main() {
-  for (const item of items) {
-    await db.send(new PutCommand({ TableName: TABLES.menu, Item: item }));
-  }
-  console.log(`seeded ${items.length} menu items`);
+  const result = await seedInitialData();
+  console.log("seed result:", result);
 }
 
 main().catch((e) => {
