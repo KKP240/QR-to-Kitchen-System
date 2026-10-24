@@ -10,6 +10,8 @@ dist
 .aws-sam
 coverage
 *.pem
+admin.json
+admin-out.json
 
 # AWS credentials
 .aws/

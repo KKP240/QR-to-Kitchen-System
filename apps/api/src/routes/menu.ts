@@ -4,6 +4,7 @@ import { db } from "../lib/dynamo";
 import { TABLES } from "../lib/config";
 import { json, notImplemented } from "../lib/response";
 import type { Route } from "../lib/types";
+import { withAuth } from "../lib/auth";
 
 export const menuRoutes: Route[] = [
   {
@@ -16,7 +17,7 @@ export const menuRoutes: Route[] = [
     },
   },
   // TODO(admin team): ต้องมี auth ก่อนเปิดใช้
-  { method: "POST", path: "/menu", handler: async () => notImplemented("admin") },
-  { method: "PUT", path: "/menu/:id", handler: async () => notImplemented("admin") },
-  { method: "DELETE", path: "/menu/:id", handler: async () => notImplemented("admin") },
+  { method: "POST", path: "/menu", handler: withAuth(async () => notImplemented("admin")) },
+  { method: "PUT", path: "/menu/:id", handler: withAuth(async () => notImplemented("admin")) },
+  { method: "DELETE", path: "/menu/:id", handler: withAuth(async () => notImplemented("admin")) },
 ];
